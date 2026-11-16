@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Redes entrenadas SONORA</title>
+<meta name="description" content="Informe de entrenamiento de las dos redes MLP de SONORA (NASA Giovanni y NASA POWER) optimizadas con NSGA-II.">
+<style>
+:root{
+  --bg:#f7f7f5; --surface:#ffffff; --ink:#1b1d21; --muted:#5d6370; --line:#e3e4e8; --grid:#eceef1;
+  --gio:#2f6fd6; --pow:#d9772b; --base1:#a9aeb8; --base2:#6f7886; --ok:#2e9b62; --bad:#c94b4b;
+  --heat0:#eef3fb; --heat1:#1f4f9e;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#121417; --surface:#1b1e23; --ink:#e9eaed; --muted:#9aa1ad; --line:#2c3038; --grid:#262a31;
+    --gio:#6b9ff0; --pow:#f0a061; --base1:#5c626d; --base2:#8a929f; --ok:#4cc48a; --bad:#e57373;
+    --heat0:#1e2530; --heat1:#6b9ff0;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#121417; --surface:#1b1e23; --ink:#e9eaed; --muted:#9aa1ad; --line:#2c3038; --grid:#262a31;
+  --gio:#6b9ff0; --pow:#f0a061; --base1:#5c626d; --base2:#8a929f; --ok:#4cc48a; --bad:#e57373;
+  --heat0:#1e2530; --heat1:#6b9ff0;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 system-ui,-apple-system,"Segoe UI",Inter,sans-serif}
+main{max-width:1040px;margin:0 auto;padding:32px 16px 64px}
+h1{font-size:28px;margin:0 0 4px;letter-spacing:-.01em}
+h2{font-size:19px;margin:0 0 4px}
+h3{font-size:15px;margin:0 0 8px}
+p{margin:0 0 10px}
+.lead{color:var(--muted);max-width:760px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:20px;margin-top:18px}
+.sub{color:var(--muted);font-size:13.5px;margin-bottom:14px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:18px}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.kpi .v{font-size:24px;font-weight:650;font-variant-numeric:tabular-nums}
+.kpi .l{color:var(--muted);font-size:12.5px}
+.kpi .v small{font-size:13px;color:var(--muted);font-weight:500}
+.legend{display:flex;flex-wrap:wrap;gap:14px;font-size:13px;color:var(--muted);margin-bottom:8px}
+.legend i{display:inline-block;width:11px;height:11px;border-radius:3px;margin-right:6px;vertical-align:-1px}
+svg{display:block;width:100%;height:auto;overflow:visible}
+svg text{fill:var(--ink);font-family:inherit}
+svg .m{fill:var(--muted)}
+table{width:100%;border-collapse:collapse;font-size:13.5px;font-variant-numeric:tabular-nums}
+th,td{text-align:left;padding:7px 8px;border-bottom:1px solid var(--line)}
+th{color:var(--muted);font-weight:600}
+code{font-family:ui-monospace,Consolas,monospace;font-size:12.5px;background:var(--grid);padding:1px 5px;border-radius:4px}
+.tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted)}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:6px}
+.flow{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch}
+.flow .st{flex:1 1 150px;border:1px solid var(--line);border-radius:10px;padding:10px 12px;font-size:13px}
+.flow .st b{display:block;font-size:13.5px;margin-bottom:2px}
+.flow .ar{align-self:center;color:var(--muted)}
+footer{color:var(--muted);font-size:12.5px;margin-top:28px}
+@media (max-width:760px){.grid2{grid-template-columns:1fr}.kpis{grid-template-columns:1fr 1fr}.flow .ar{display:none}}
+</style>
+</head>
+<body>
+<main>
+  <h1>Las dos redes entrenadas de SONORA</h1>
+  <p class="lead">Dos perceptrones multicapa (Hba.NeuralNet) predicen si una variable climática <b>baja</b>, se mantiene <b>sin tendencia</b> o <b>sube</b> en una región. Sus hiperparámetros se buscaron con NSGA-II (HBA.Evolutionary). Uno usa datos de <b>NASA Giovanni</b> y el otro de <b>NASA POWER</b>. Todas las cifras son del conjunto de prueba: 29 regiones que ninguna red vio al entrenar.</p>
+
+  <div class="legend" style="margin-top:14px"><span><i style="background:var(--gio)"></i>sonora-giovanni</span><span><i style="background:var(--pow)"></i>sonora-power</span></div>
+
+  <div class="kpis">
+    <div class="kpi"><div class="l">Exactitud en prueba</div><div class="v"><span style="color:var(--gio)">68,1%</span> <small>/</small> <span style="color:var(--pow)">64,2%</span></div></div>
+    <div class="kpi"><div class="l">F1 macro en prueba</div><div class="v"><span style="color:var(--gio)">0,683</span> <small>/</small> <span style="color:var(--pow)">0,606</span></div></div>
+    <div class="kpi"><div class="l">Acierto top-3 del recomendador</div><div class="v"><span style="color:var(--gio)">83,9%</span> <small>/</small> <span style="color:var(--pow)">93,1%</span></div></div>
+    <div class="kpi"><div class="l">Parámetros de la red</div><div class="v"><span style="color:var(--gio)">345</span> <small>/</small> <span style="color:var(--pow)">1797</span></div></div>
+  </div>
+
+  <section class="card">
+    <h2>1 · Exactitud frente a las líneas base</h2>
+    <p class="sub">Hay dos líneas base. «Clase mayoritaria» siempre predice la clase más frecuente. «Por variable» predice la clase más común de cada variable en el entrenamiento. Las dos redes superan a ambas.</p>
+    <div class="legend"><span><i style="background:var(--base1)"></i>Clase mayoritaria</span><span><i style="background:var(--base2)"></i>Por variable</span><span><i style="background:var(--gio)"></i>MLP Giovanni</span><span><i style="background:var(--pow)"></i>MLP POWER</span></div>
+    <div id="chAcc"></div>
+  </section>
+
+  <section class="card">
+    <h2>2 · Calidad por clase</h2>
+    <p class="sub">F1 de cada clase en prueba. Para POWER, la clase intermedia «sin tendencia» es la más difícil: muchas de sus muestras se predicen como «sube».</p>
+    <div id="chF1"></div>
+  </section>
+
+  <section class="card">
+    <h2>3 · Matrices de confusión</h2>
+    <p class="sub">Filas: clase real. Columnas: clase predicha. La diagonal son los aciertos y cada celda indica cuántas muestras de prueba cayeron en ella.</p>
+    <div class="grid2"><div><h3><span class="dot" style="background:var(--gio)"></span>Giovanni · 317 muestras</h3><div id="cmG"></div></div>
+    <div><h3><span class="dot" style="background:var(--pow)"></span>POWER · 402 muestras</h3><div id="cmP"></div></div></div>
+  </section>
+
+  <section class="card">
+    <h2>4 · Recomendador: qué variables escuchar en cada región</h2>
+    <p class="sub">La red ordena las variables de cada región según la confianza con que predice una tendencia. Para cada región se cuenta qué parte de sus 3 primeras variables tiene de verdad una tendencia, y se promedia sobre las 29 regiones de prueba. Se compara con elegir 3 variables al azar y con el orden por variable.</p>
+    <div class="legend"><span><i style="background:var(--base1)"></i>Al azar</span><span><i style="background:var(--base2)"></i>Por variable</span><span><i style="background:var(--gio)"></i>MLP Giovanni</span><span><i style="background:var(--pow)"></i>MLP POWER</span></div>
+    <div id="chTop3"></div>
+    <p class="sub" style="margin-top:10px">Comparada con el orden por variable, Giovanni gana en 5 regiones y pierde en 4. POWER gana en 5 y pierde en 3. En las demás regiones empatan.</p>
+  </section>
+
+  <section class="card">
+    <h2>5 · Arquitectura de cada red</h2>
+    <p class="sub">Las entradas son la posición (latitud, longitud en seno/coseno y elevación), la climatología de la región, el bioma (13 categorías en one-hot) y la variable que se consulta (también en one-hot). La salida es softmax sobre 3 clases.</p>
+    <div class="grid2">
+      <div><h3><span class="dot" style="background:var(--gio)"></span>sonora-giovanni · 34 → 9 → 3</h3><div id="arG"></div></div>
+      <div><h3><span class="dot" style="background:var(--pow)"></span>sonora-power · 38 → 35 → 11 → 3</h3><div id="arP"></div></div>
+    </div>
+    <table style="margin-top:14px">
+      <tr><th>Grupo de entradas</th><th>Giovanni</th><th>POWER</th></tr>
+      <tr><td>Posición</td><td>5 (lat, sin lat, sin lon, cos lon, elevación)</td><td>5</td></tr>
+      <tr><td>Climatología</td><td>4: GPM_PRECIP, AIRS_TAIR, OMI_AAOD, GLDAS_SOILM</td><td>6: T2M, PRECTOTCORR, RH2M, GWETROOT, ALLSKY_SFC_SW_DWN, CLOUD_AMT</td></tr>
+      <tr><td>Bioma (one-hot)</td><td>13</td><td>13</td></tr>
+      <tr><td>Variable consultada (one-hot)</td><td>12 (GPM, GLDAS, AIRS, OMI)</td><td>14 (temperatura, humedad, suelo, viento, presión, radiación, nubes)</td></tr>
+      <tr><td><b>Total de entradas</b></td><td><b>34</b></td><td><b>38</b></td></tr>
+      <tr><td>Parámetros (pesos + sesgos)</td><td>34·9+9 + 9·3+3 = <b>345</b></td><td>38·35+35 + 35·11+11 + 11·3+3 = <b>1797</b></td></tr>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>6 · Hiperparámetros elegidos dentro del espacio de búsqueda</h2>
+    <p class="sub">Cada barra es el rango que exploró NSGA-II. Los puntos marcan el valor elegido para cada red y el rombo gris la configuración manual de partida. La tasa de aprendizaje y L2 usan escala logarítmica, igual que el gen.</p>
+    <div class="legend"><span><i style="background:var(--gio);border-radius:50%"></i>Giovanni</span><span><i style="background:var(--pow);border-radius:50%"></i>POWER</span><span><i style="background:var(--base2);transform:rotate(45deg)"></i>Manual (16/0 · lr 0,003 · L2 0,001 · 800 it.)</span></div>
+    <div id="chHp"></div>
+  </section>
+
+  <section class="card">
+    <h2>7 · Cómo se buscaron: NSGA-II</h2>
+    <p class="sub">Es una búsqueda evolutiva con dos objetivos: maximizar el F1 macro en validación y minimizar el número de parámetros. Del frente de Pareto final se elige la red más pequeña cuyo F1 queda a 0,01 o menos del mejor.</p>
+    <div class="flow">
+      <div class="st"><b>1 · Cromosoma</b>Genes [capa 1, capa 2, log lr, log L2, iteraciones]</div><div class="ar">→</div>
+      <div class="st"><b>2 · Evaluar</b>Se entrena el MLP con las 143 regiones de entrenamiento y se mide el F1 en las 27 de validación</div><div class="ar">→</div>
+      <div class="st"><b>3 · Ordenar</b>Frentes no dominados y distancia de apiñamiento</div><div class="ar">→</div>
+      <div class="st"><b>4 · Reproducir</b>Cruce con p = 0,9 y mutación con p = 0,3</div><div class="ar">→</div>
+      <div class="st"><b>5 · Elegir</b>Frente de Pareto final; luego la red más pequeña con F1 ≥ mejor − 0,01</div>
+    </div>
+    <table style="margin-top:16px">
+      <tr><th>Configuración</th><th>Valor</th></tr>
+      <tr><td>Población × generaciones</td><td>16 × 8</td></tr>
+      <tr><td>Semilla · tamaño de lote</td><td>42 · 32</td></tr>
+      <tr><td>Rangos</td><td>capa 1: 4–64 · capa 2: 0–32 · lr: 0,0002–0,05 · L2: 1e-6–0,01 · iteraciones: 200–2000</td></tr>
+      <tr><td>División por regiones</td><td>143 entrenamiento · 27 validación · 29 prueba (ninguna región se repite entre conjuntos)</td></tr>
+      <tr><td>F1 en validación de la red elegida</td><td><span style="color:var(--gio)">Giovanni 0,696</span> · <span style="color:var(--pow)">POWER 0,639</span></td></tr>
+      <tr><td>Coste de la búsqueda</td><td>Giovanni: 137 redes evaluadas en 44 min 48 s. POWER: 8 generaciones registradas entre las 15:07 y las 16:43, unas 1 h 40 min, porque las redes eran más grandes y llegaban a 2000 iteraciones.</td></tr>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>8 · Las regiones de Perú</h2>
+    <p class="sub">Cusco y Titicaca–Puno forman parte de las 29 regiones de prueba. En ambas, las 3 variables que recomienda cada red tienen tendencia (acierto del 100%).</p>
+    <table>
+      <tr><th>Región</th><th><span class="dot" style="background:var(--gio)"></span>Top-3 Giovanni</th><th><span class="dot" style="background:var(--pow)"></span>Top-3 POWER</th></tr>
+      <tr><td>Peru_Cusco</td><td><code>GLDAS_ROOTM</code> <code>GLDAS_SOILM</code> <code>OMI_O3</code></td><td><code>T2M_MAX</code> <code>PS</code> <code>T2M_MIN</code></td></tr>
+      <tr><td>Peru_Titicaca_Puno</td><td><code>GLDAS_ROOTM</code> <code>GLDAS_SOILM</code> <code>OMI_O3</code></td><td><code>PS</code> <code>ALLSKY_SFC_SW_DWN</code> <code>T2M_MIN</code></td></tr>
+      <tr><td>Amazonia_Madre_de_Dios</td><td><code>OMI_O3</code> <code>OMI_AAOD</code> <code>GLDAS_TAIR</code> <span class="tag">67%</span></td><td><code>TS</code> <code>T2M_MAX</code> <code>T2M</code> <span class="tag">100%</span></td></tr>
+    </table>
+  </section>
+
+  <section class="card">
+    <h2>Lectura rápida</h2>
+    <p><b>Giovanni</b> es la red más pequeña (345 parámetros) y la más equilibrada entre clases: su F1 macro es 0,683 y ninguna clase baja de 0,63.</p>
+    <p><b>POWER</b> necesita una red 5 veces mayor. Su exactitud supera a la línea base mayoritaria por solo 10 puntos, porque «sube» es el 54% de sus muestras. A cambio, su recomendador es el mejor: el 93% de sus 3 variables recomendadas tiene tendencia real.</p>
+    <p>Las dos superan a las dos líneas base en exactitud y en el top-3, lo que justifica usar redes en lugar de reglas fijas por variable.</p>
+  </section>
+
+  <footer>Fuente: <code>models/sonora-giovanni/metrics.json</code>, <code>models/sonora-power/metrics.json</code> y <code>features.json</code> de TrendDetective. Entrenadas el 15/11/2026. Librerías: Hba.NeuralNet y HBA.Evolutionary (nuget.org, HbaTech).</footer>
+</main>
+
+<script>
+(function(){
+const NS="http://www.w3.org/2000/svg";
+function el(tag,attrs,parent,text){const e=document.createElementNS(NS,tag);for(const k in attrs)e.setAttribute(k,attrs[k]);if(text!=null)e.textContent=text;if(parent)parent.appendChild(e);return e;}
+function svg(host,w,h,label){const s=el("svg",{viewBox:`0 0 ${w} ${h}`,role:"img","aria-label":label});document.getElementById(host).appendChild(s);return s;}
+const pct=v=>(v*100).toFixed(1).replace(".",",")+"%";
+const dec=v=>v.toFixed(3).replace(".",",");
+
+// Horizontal grouped bars: groups [{name, bars:[{label,v,color}]}]
+function hbars(host,groups,fmt,label,max=1){
+  const L=150,R=60,W=900,bh=18,gap=5,gg=22;
+  let h=10;groups.forEach(g=>h+=g.bars.length*(bh+gap)+gg);
+  const s=svg(host,W,h+20,label);const pw=W-L-R;
+  for(let t=0;t<=4;t++){const x=L+pw*t/4;el("line",{x1:x,x2:x,y1:0,y2:h,stroke:"var(--grid)"},s);el("text",{x,y:h+16,"text-anchor":"middle","font-size":12,class:"m"},s,fmt(max*t/4));}
+  let y=10;
+  groups.forEach(g=>{
+    const gh=g.bars.length*(bh+gap);
+    el("text",{x:L-12,y:y+gh/2,"text-anchor":"end","dominant-baseline":"middle","font-size":13.5,"font-weight":600},s,g.name);
+    g.bars.forEach(b=>{
+      const w=pw*b.v/max;
+      const r=el("rect",{x:L,y,width:Math.max(w,1),height:bh,rx:3,fill:b.color},s);
+      el("title",{},r,`${b.label}: ${fmt(b.v)}`);
+      el("text",{x:L+w+6,y:y+bh/2,"dominant-baseline":"middle","font-size":12.5},s,fmt(b.v));
+      y+=bh+gap;
+    });
+    y+=gg;
+  });
+}
+
+hbars("chAcc",[
+  {name:"Giovanni",bars:[{label:"Clase mayoritaria",v:.3754,color:"var(--base1)"},{label:"Por variable",v:.5836,color:"var(--base2)"},{label:"MLP",v:.6814,color:"var(--gio)"}]},
+  {name:"POWER",bars:[{label:"Clase mayoritaria",v:.5398,color:"var(--base1)"},{label:"Por variable",v:.6219,color:"var(--base2)"},{label:"MLP",v:.6418,color:"var(--pow)"}]}
+],pct,"Exactitud en prueba frente a líneas base");
+
+hbars("chF1",[
+  {name:"baja",bars:[{label:"Giovanni",v:.6851,color:"var(--gio)"},{label:"POWER",v:.6154,color:"var(--pow)"}]},
+  {name:"sin tendencia",bars:[{label:"Giovanni",v:.6356,color:"var(--gio)"},{label:"POWER",v:.4486,color:"var(--pow)"}]},
+  {name:"sube",bars:[{label:"Giovanni",v:.7281,color:"var(--gio)"},{label:"POWER",v:.7549,color:"var(--pow)"}]},
+  {name:"F1 macro",bars:[{label:"Giovanni",v:.6829,color:"var(--gio)"},{label:"POWER",v:.6063,color:"var(--pow)"}]}
+],dec,"F1 por clase");
+
+hbars("chTop3",[
+  {name:"Giovanni",bars:[{label:"Al azar",v:.6172,color:"var(--base1)"},{label:"Por variable",v:.7931,color:"var(--base2)"},{label:"MLP",v:.8391,color:"var(--gio)"}]},
+  {name:"POWER",bars:[{label:"Al azar",v:.7304,color:"var(--base1)"},{label:"Por variable",v:.8736,color:"var(--base2)"},{label:"MLP",v:.9310,color:"var(--pow)"}]}
+],pct,"Acierto top-3 del recomendador");
+
+// Confusion matrices
+function cm(host,m,accent){
+  const labs=["baja","sin tend.","sube"],L=90,T=44,c=92,W=L+3*c+10,H=T+3*c+10;
+  const s=svg(host,W,H,"Matriz de confusión");
+  el("text",{x:L+1.5*c,y:12,"text-anchor":"middle","font-size":12,class:"m"},s,"predicha →");
+  labs.forEach((l,j)=>el("text",{x:L+j*c+c/2,y:T-8,"text-anchor":"middle","font-size":12.5},s,l));
+  m.forEach((row,i)=>{
+    const tot=row.reduce((a,b)=>a+b,0);
+    el("text",{x:L-10,y:T+i*c+c/2,"text-anchor":"end","dominant-baseline":"middle","font-size":12.5},s,labs[i]);
+    row.forEach((v,j)=>{
+      const f=v/tot;
+      const g=el("g",{},s);
+      el("rect",{x:L+j*c+2,y:T+i*c+2,width:c-4,height:c-4,rx:6,fill:i===j?accent:"var(--bad)","fill-opacity":(0.1+0.85*f).toFixed(2)},g);
+      el("title",{},g,`real ${labs[i]} → predicha ${labs[j]}: ${v} (${pct(f)} de la fila)`);
+      el("text",{x:L+j*c+c/2,y:T+i*c+c/2-6,"text-anchor":"middle","font-size":19,"font-weight":650},g,v);
+      el("text",{x:L+j*c+c/2,y:T+i*c+c/2+14,"text-anchor":"middle","font-size":11.5,class:"m"},g,pct(f));
+    });
+  });
+  el("text",{x:14,y:T+1.5*c,"text-anchor":"middle","font-size":12,class:"m",transform:`rotate(-90 14 ${T+1.5*c})`},s,"real ↓");
+}
+cm("cmG",[[62,14,5],[28,75,16],[10,28,79]],"var(--gio)");
+cm("cmP",[[56,18,3],[26,48,34],[23,40,154]],"var(--pow)");
+
+// Architecture diagrams
+function arch(host,layers,accent){
+  const W=460,H=300,s=svg(host,W,H,"Arquitectura de la red");
+  const xs=layers.map((_,i)=>40+i*(W-80)/(layers.length-1));
+  const maxShow=12;
+  const pos=layers.map((L,i)=>{const n=Math.min(L.n,maxShow);const sp=Math.min(20,(H-80)/n);const y0=(H-30)/2-(n-1)*sp/2;return Array.from({length:n},(_,k)=>[xs[i],y0+k*sp]);});
+  for(let i=0;i<pos.length-1;i++)pos[i].forEach(a=>pos[i+1].forEach(b=>el("line",{x1:a[0],y1:a[1],x2:b[0],y2:b[1],stroke:"var(--muted)","stroke-opacity":.18,"stroke-width":.7},s)));
+  pos.forEach((p,i)=>{
+    const L=layers[i];
+    p.forEach((q,k)=>{
+      const trunc=L.n>maxShow&&k===Math.floor(maxShow/2);
+      if(trunc){el("text",{x:q[0],y:q[1]+4,"text-anchor":"middle","font-size":13,class:"m"},s,"⋮");return;}
+      el("circle",{cx:q[0],cy:q[1],r:6.5,fill:i===0?"var(--surface)":i===pos.length-1?"var(--ink)":accent,stroke:i===0?"var(--muted)":"none"},s);
+    });
+    el("text",{x:xs[i],y:H-22,"text-anchor":"middle","font-size":13,"font-weight":600},s,L.n);
+    el("text",{x:xs[i],y:H-6,"text-anchor":"middle","font-size":11.5,class:"m"},s,L.t);
+  });
+}
+arch("arG",[{n:34,t:"entradas"},{n:9,t:"oculta"},{n:3,t:"softmax"}],"var(--gio)");
+arch("arP",[{n:38,t:"entradas"},{n:35,t:"oculta 1"},{n:11,t:"oculta 2"},{n:3,t:"softmax"}],"var(--pow)");
+
+// Hyperparameters in search range
+(function(){
+  const rows=[
+    {n:"Capa oculta 1",min:4,max:64,g:9,p:35,m:16,f:v=>v},
+    {n:"Capa oculta 2",min:0,max:32,g:0,p:11,m:0,f:v=>v},
+    {n:"Tasa de aprendizaje",min:.0002,max:.05,g:.00221,p:.00424,m:.003,log:true,f:v=>v.toPrecision(2).replace(".",",")},
+    {n:"Regularización L2",min:1e-6,max:.01,g:.0014159,p:.0027116,m:.001,log:true,f:v=>v<1e-4?v.toExponential(0):v.toPrecision(2).replace(".",",")},
+    {n:"Iteraciones",min:200,max:2000,g:700,p:2000,m:800,f:v=>v}
+  ];
+  const L=170,R=70,W=900,rh=58,s=svg("chHp",W,rows.length*rh+10,"Hiperparámetros elegidos en el rango de búsqueda");const pw=W-L-R;
+  rows.forEach((r,i)=>{
+    const y=i*rh+26;
+    const X=v=>L+pw*(r.log?(Math.log(v)-Math.log(r.min))/(Math.log(r.max)-Math.log(r.min)):(v-r.min)/(r.max-r.min));
+    el("text",{x:L-14,y,"text-anchor":"end","dominant-baseline":"middle","font-size":13.5,"font-weight":600},s,r.n);
+    el("rect",{x:L,y:y-4,width:pw,height:8,rx:4,fill:"var(--grid)"},s);
+    el("text",{x:L-4,y:y+22,"text-anchor":"start","font-size":11.5,class:"m"},s,"mín "+r.f(r.min));
+    el("text",{x:L+pw+14,y:y+4,"text-anchor":"start","font-size":11.5,class:"m"},s,"máx "+r.f(r.max));
+    const mx=X(r.m);el("rect",{x:mx-6,y:y-6,width:12,height:12,fill:"var(--base2)",transform:`rotate(45 ${mx} ${y})`},s);
+    [["g","var(--gio)",-1],["p","var(--pow)",1]].forEach(([k,c,side])=>{
+      const x=X(r[k]);const cc=el("circle",{cx:x,cy:y,r:8,fill:c,stroke:"var(--surface)","stroke-width":2},s);
+      el("title",{},cc,`${k==="g"?"Giovanni":"POWER"}: ${r.f(r[k])}`);
+      el("text",{x,y:y+(side<0?-14:24),"text-anchor":"middle","font-size":12.5,"font-weight":600,fill:c},s,r.f(r[k])).style.fill=c;
+    });
+  });
+})();
+})();
+</script>
+</body>
+</html>

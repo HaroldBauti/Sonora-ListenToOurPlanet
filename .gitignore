@@ -1,0 +1,19 @@
+## .NET / Visual Studio
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.userprefs
+publish/
+TestResults/
+
+## Node
+node_modules/
+
+## SO
+Thumbs.db
+.DS_Store
+
+## Datos descargados en tiempo de ejecución (atlas de biomas)
+App_Data/

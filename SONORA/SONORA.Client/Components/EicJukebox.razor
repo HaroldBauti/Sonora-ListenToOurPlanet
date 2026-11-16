@@ -1,0 +1,98 @@
+@* Jukebox del Earth Information Center: visualizaciones de la Tierra de la NASA (SVS y Earth Observatory).
+   Cada tarjeta se escucha cuadro a cuadro desde su hoja de cuadros incluida en SONORA (wwwroot/eic). *@
+@inject HttpClient Http
+@inject IJSRuntime JS
+
+<p class="hint" id="eicHelp">
+    Elige una visualización de la Tierra de la NASA, como las del <strong>Earth Information Center</strong>. SONORA recorre
+    sus cuadros en el tiempo y convierte sus 4 familias de color en melodía, ritmo, bajo y armonía.
+</p>
+@if (items is not null)
+{
+    <div class="eic-filtros" role="group" aria-label="Filtrar por tema">
+        @foreach (var t in new[] { "Todos" }.Concat(items.Select(i => i.Tema).Distinct()))
+        {
+            <button type="button" class="chip @(tema == t ? "on" : "")" aria-pressed="@(tema == t ? "true" : "false")"
+                    @onclick="() => tema = t">@t</button>
+        }
+    </div>
+}
+<ul class="eic-grid" aria-describedby="eicHelp">
+    @if (tema is "Todos" or "Aire")
+    {
+        <li class="eic-card">
+            <span class="eic-tema">Aire · imagen fija</span>
+            <h3>Aerosoles GEOS · 19 ago 2025</h3>
+            <p>Polvo del Sahara hacia el huracán Erin, humo de África y sal marina. Usa la paleta oficial de la NASA (sin k-means).</p>
+            <p class="eic-meta"><a href="https://svs.gsfc.nasa.gov/5669/" target="_blank" rel="noopener">NASA SVS 5669 ↗</a> · listo al instante</p>
+            <button type="button" class="btn btn-small" @onclick="OnSample" disabled="@Busy">🎧 Escuchar</button>
+        </li>
+    }
+    @if (items is null)
+    {
+        <li class="hint" role="status">@(error ?? "Cargando el catálogo del EIC…")</li>
+    }
+    else
+    {
+        @foreach (var it in items.Where(i => tema == "Todos" || i.Tema == tema))
+        {
+            <li class="eic-card">
+                <span class="eic-tema">@it.Tema · @it.Periodo</span>
+                <h3>@it.Titulo</h3>
+                <p>@it.Descripcion</p>
+                <p class="eic-meta">
+                    <a href="@it.FuenteUrl" target="_blank" rel="noopener">@it.Fuente ↗</a> ·
+                    @(it.EnCache ? "listo al instante" : $"{it.Mb.ToString("0", System.Globalization.CultureInfo.GetCultureInfo("es-ES"))} MB la primera vez")
+                </p>
+                <button type="button" class="btn btn-small" @onclick="() => OnListen.InvokeAsync(it)" disabled="@Busy"
+                        aria-label="@($"Escuchar {it.Titulo}")">🎧 Escuchar</button>
+            </li>
+        }
+    }
+</ul>
+
+@code {
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public EventCallback<EicItem> OnListen { get; set; }
+    [Parameter] public EventCallback OnSample { get; set; }
+
+    List<EicItem>? items;
+    string? error;
+    string tema = "Todos";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { items = await Http.GetFromJsonAsync<List<EicItem>>("api/eic/catalogo"); }
+        catch (Exception ex) { error = $"No se pudo cargar el catálogo del EIC: {ex.Message}"; }
+    }
+
+    // Modo English: los textos del catálogo tienen su versión propia (no dependen del traductor del navegador).
+    bool translationsSent;
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (translationsSent || items is null) return;
+        translationsSent = true;
+        var pairs = new Dictionary<string, string>();
+        foreach (var it in items.Where(i => i.En is not null))
+        {
+            pairs.TryAdd(it.Titulo, it.En!.Titulo);
+            pairs.TryAdd(it.Periodo, it.En.Periodo);
+            pairs.TryAdd(it.Descripcion, it.En.Descripcion);
+            pairs.TryAdd(it.Alt, it.En.Alt);
+            pairs.TryAdd(it.Contexto, it.En.Contexto);
+            pairs.TryAdd($"Escuchar {it.Titulo}", $"Listen to {it.En.Titulo}");
+        }
+        try
+        {
+            var mod = await JS.InvokeAsync<IJSObjectReference>("import", "./js/sonora.js");
+            await mod.InvokeVoidAsync("addTranslations", pairs);
+        }
+        catch (JSException) { /* sin traducciones: queda en español */ }
+    }
+
+    /// <summary>Marca una visualización como ya descargada (después de escucharla).</summary>
+    public void MarkCached(string id)
+    {
+        if (items?.FindIndex(i => i.Id == id) is int k and >= 0) { items[k] = items[k] with { EnCache = true }; StateHasChanged(); }
+    }
+}

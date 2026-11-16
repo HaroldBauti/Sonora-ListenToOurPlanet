@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Earth Jukebox · Aerosoles</title>
+<style>
+  :root {
+    --bg: #0b0f14; --panel: #131a22; --line: #243040; --text: #e6edf3; --muted: #8b98a8; --accent: #7cc4ff;
+    --smoke: #d06048; --dust: #c29bdb; --salt: #84a8a8; --sulfate: #52db34;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 15px/1.5 system-ui, "Segoe UI", sans-serif; }
+  main { max-width: 1100px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 1.5rem; margin: 0 0 4px; }
+  h2 { font-size: 1.05rem; margin: 28px 0 8px; }
+  p.sub { color: var(--muted); margin: 0 0 16px; }
+  .stage { position: relative; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; background: #000; }
+  .stage img, .stage canvas { display: block; width: 100%; height: auto; }
+  .stage canvas { position: absolute; inset: 0; height: 100%; cursor: pointer; }
+  .controls { display: flex; flex-wrap: wrap; gap: 12px 20px; align-items: center; margin: 14px 0; }
+  button { background: var(--accent); color: #04121f; border: 0; border-radius: 8px; padding: 9px 18px; font-weight: 600; font-size: 15px; cursor: pointer; }
+  button:focus-visible, input:focus-visible { outline: 3px solid #fff; outline-offset: 2px; }
+  label { color: var(--muted); display: inline-flex; gap: 8px; align-items: center; }
+  .layers { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px; }
+  .layer { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
+  .layer header { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+  .layer .name { font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .sw { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
+  .layer .role { color: var(--muted); font-size: 13px; }
+  .meter { height: 8px; background: #0a0e13; border-radius: 4px; margin: 8px 0 4px; overflow: hidden; }
+  .meter > div { height: 100%; width: 0; transition: width .08s linear; }
+  .val { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; }
+  #status { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin-top: 10px; min-height: 2.6em; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th { color: var(--muted); font-weight: 500; }
+  .note { color: var(--muted); font-size: 13px; }
+  .pareto-grid { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 16px; align-items: start; }
+  @media (max-width: 760px) { .pareto-grid { grid-template-columns: 1fr; } }
+  #front { width: 100%; height: auto; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; }
+  .pareto input[type=range] { width: 100%; }
+  .slider-ends { display: flex; justify-content: space-between; color: var(--muted); font-size: 13px; }
+  .scores { display: grid; grid-template-columns: auto 1fr; gap: 2px 12px; font-variant-numeric: tabular-nums; margin: 10px 0; }
+  .scores dt { color: var(--muted); } .scores dd { margin: 0; }
+  button.secondary { background: transparent; color: var(--text); border: 1px solid var(--line); }
+  kbd { background: #1d2733; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; font-size: 12px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Earth Jukebox · Aerosoles GEOS</h1>
+  <p class="sub">NASA SVS 5669 · modelo GEOS, 19 de agosto de 2025, 20:00 UTC. El mapa se recorre de oeste a este; cada columna es un paso musical.</p>
+
+  <div class="stage">
+    <img id="img" src="data/Aerosols_2025-08-19T20_00_00_1920x1080.png" alt="Mapa mundial de aerosoles: polvo del Sahara cruzando el Atlántico hacia el huracán Erin, humo de incendios en el sur de África, sulfatos verdes en latitudes medias y sal marina sobre los océanos del sur.">
+    <canvas id="overlay" width="480" height="270" aria-hidden="true"></canvas>
+  </div>
+
+  <div class="controls">
+    <button id="play" aria-keyshortcuts="Space">▶ Reproducir</button>
+    <label>Tempo <input id="bpm" type="range" min="50" max="160" value="88" aria-label="Tempo en pulsos por minuto"> <span id="bpmv" class="val">88 BPM</span></label>
+    <label><input id="showClass" type="checkbox"> Ver clasificación de aerosoles</label>
+    <span class="note"><kbd>Espacio</kbd> reproducir/pausar · <kbd>←</kbd><kbd>→</kbd> recorrer columnas · clic en el mapa para saltar</span>
+  </div>
+
+  <div class="layers" id="layers"></div>
+  <div id="status" role="status" aria-live="polite">Cargando y analizando la imagen…</div>
+
+  <section class="pareto" aria-labelledby="paretoTitle">
+    <h2 id="paretoTitle">Equilibrio ciencia ↔ música · NSGA-II (HBA.Evolutionary)</h2>
+    <div id="paretoBody">
+      <p class="note">Aún no hay <code>data/pareto.json</code>. Pulsa <b>Exportar características</b>, guarda el archivo en <code>data/</code> y ejecuta el optimizador (<code>dotnet run -c Release</code> en la carpeta <code>optimizer</code>).</p>
+    </div>
+    <div class="controls">
+      <button id="export" type="button">Exportar características</button>
+    </div>
+  </section>
+
+  <h2>Cómo se convierte la imagen en música</h2>
+  <table>
+    <thead><tr><th>Aerosol (color oficial)</th><th>Capa</th><th>Regla</th></tr></thead>
+    <tbody>
+      <tr><td><span class="sw" style="background:var(--sulfate)"></span> Sulfatos</td><td>Melodía · sintetizador brillante</td><td>Intensidad de la columna → nota de la pentatónica de do menor (3 octavas). Más sulfato, nota más aguda y más fuerte.</td></tr>
+      <tr><td><span class="sw" style="background:var(--dust)"></span> Polvo</td><td>Ritmo · percusión granular</td><td>Intensidad → densidad rítmica: 1, 2 o 4 golpes por paso; bombo cuando el polvo es muy denso.</td></tr>
+      <tr><td><span class="sw" style="background:var(--smoke)"></span> Humo (carbono negro)</td><td>Bajo · sintetizador grave</td><td>Aparece cuando hay humo; la intensidad controla el volumen y, si es alta, añade la quinta.</td></tr>
+      <tr><td><span class="sw" style="background:var(--salt)"></span> Sal marina</td><td>Armonía · pad ambiental</td><td>Progresión Cm–A♭–E♭–B♭ (un acorde por cuarto del planeta); la cantidad de sal controla el volumen del pad.</td></tr>
+    </tbody>
+  </table>
+  <p class="note">Clasificación: cada píxel se compara con los colores de la barra oficial de la NASA (se leen de <code>Aerosols_cbar.png</code>) usando su cromaticidad; los grises (tierra, hielo) no suenan. Cada capa se normaliza a su propio máximo en este mapa, así que los porcentajes son relativos dentro de la imagen, no concentraciones absolutas. Las reglas son fijas durante la reproducción.</p>
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/tone@14.7.77/build/Tone.js"></script>
+<script>
+const COLS = 32, ROWS = 8, AW = 480, AH = 270;
+const CLASSES = [
+  { id: "sulfate", name: "Sulfatos", role: "Melodía", cbarX: 1192, css: "--sulfate" },
+  { id: "dust",    name: "Polvo",    role: "Ritmo",   cbarX: 597,  css: "--dust" },
+  { id: "smoke",   name: "Humo",     role: "Bajo",    cbarX: 302,  css: "--smoke" },
+  { id: "salt",    name: "Sal marina", role: "Armonía", cbarX: 898, css: "--salt" },
+];
+// Pentatónica de do menor, 3 octavas
+const SCALE = ["C3","Eb3","F3","G3","Bb3","C4","Eb4","F4","G4","Bb4","C5","Eb5","F5","G5","Bb5"];
+const NOTE_ES = { C: "Do", Eb: "Mi♭", F: "Fa", G: "Sol", Bb: "Si♭", Ab: "La♭", D: "Re" };
+const CHORDS = [
+  { name: "Do menor", notes: ["C3","Eb3","G3"], root: "C2", fifth: "G2" },
+  { name: "La♭ mayor", notes: ["Ab2","C3","Eb3"], root: "Ab1", fifth: "Eb2" },
+  { name: "Mi♭ mayor", notes: ["Eb3","G3","Bb3"], root: "Eb2", fifth: "Bb2" },
+  { name: "Si♭ mayor", notes: ["Bb2","D3","F3"], root: "Bb1", fifth: "F2" },
+];
+const esNote = n => { const m = n.match(/^([A-G]b?)(\d)$/); return NOTE_ES[m[1]] + m[2]; };
+
+// Parámetros del mapeo. MANUAL = los elegidos a mano; el optimizador (optimizer/Program.cs) propone otros.
+// IMPORTANTE: ema() y compile() deben ser idénticos a Engine.Ema/Engine.Compile en C#.
+const MANUAL = { smoothMel: 0, smoothRhy: 0, sulThr: 0.10, gamma: 1, pitchLow: 0, pitchSpan: 15, dust1: 0.12, dust2: 0.45, dust4: 0.75, smokeThr: 0.12 };
+let params = { ...MANUAL }, seq = null, pareto = null;
+function ema(x, a) {
+  const n = x.length, out = new Array(n); let s = x[0];
+  for (let pass = 0; pass < 2; pass++) for (let i = 0; i < n; i++) { s = a * s + (1 - a) * x[i]; if (pass === 1) out[i] = s; }
+  return out;
+}
+function compile(p) {
+  const sul = data.col.sulfate, dust = data.col.dust, smoke = data.col.smoke;
+  const sm = ema(sul, p.smoothMel), sd = ema(dust, p.smoothRhy);
+  return {
+    mi: sm.map(v => v > p.sulThr ? Math.min(SCALE.length - 1, p.pitchLow + Math.round(Math.pow(v, p.gamma) * (p.pitchSpan - 1))) : -1),
+    hits: sd.map(v => v > p.dust4 ? 4 : v > p.dust2 ? 2 : v > p.dust1 ? 1 : 0),
+    bass: smoke.map(v => v > p.smokeThr),
+  };
+}
+function setParams(p) { params = p; seq = compile(p); if (data) updateUI(step, false); }
+
+let data = null;      // { col: {sulfate:[], ...}, classMap, amtMap }
+let step = 0, playing = false, audio = null;
+
+function loadImage(src) {
+  return new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = src; });
+}
+
+async function analyze() {
+  const [img, cbar] = await Promise.all([
+    loadImage("data/Aerosols_2025-08-19T20_00_00_1920x1080.png"),
+    loadImage("data/Aerosols_cbar.png"),
+  ]);
+  // 1) Calibrar colores con la barra oficial
+  const cc = document.createElement("canvas"); cc.width = cbar.width; cc.height = cbar.height;
+  const cx = cc.getContext("2d"); cx.drawImage(cbar, 0, 0);
+  for (const k of CLASSES) {
+    const d = cx.getImageData(k.cbarX - 10, 177, 20, 20).data;
+    let r = 0, g = 0, b = 0, n = d.length / 4;
+    for (let i = 0; i < d.length; i += 4) { r += d[i]; g += d[i+1]; b += d[i+2]; }
+    r /= n; g /= n; b /= n;
+    const m = (r + g + b) / 3, c = [r - m, g - m, b - m], norm = Math.hypot(...c);
+    k.rgb = [r, g, b].map(Math.round); k.norm = norm; k.u = c.map(v => v / norm);
+  }
+  // 2) Clasificar píxeles (imagen reducida a 480x270)
+  const ic = document.createElement("canvas"); ic.width = AW; ic.height = AH;
+  const ix = ic.getContext("2d", { willReadFrequently: true }); ix.drawImage(img, 0, 0, AW, AH);
+  const px = ix.getImageData(0, 0, AW, AH).data;
+  const classMap = new Int8Array(AW * AH).fill(-1), amtMap = new Float32Array(AW * AH);
+  const cell = CLASSES.map(() => Array.from({ length: ROWS }, () => new Float32Array(COLS)));
+  const cnt = Array.from({ length: ROWS }, () => new Float32Array(COLS));
+  for (let y = 0; y < AH; y++) for (let x = 0; x < AW; x++) {
+    const i = (y * AW + x) * 4, r = px[i], g = px[i+1], b = px[i+2], m = (r + g + b) / 3;
+    const c0 = r - m, c1 = g - m, c2 = b - m, cn = Math.hypot(c0, c1, c2);
+    const row = Math.min(ROWS - 1, Math.floor(y * ROWS / AH)), col = Math.min(COLS - 1, Math.floor(x * COLS / AW));
+    cnt[row][col]++;
+    if (cn < 6) continue;                       // gris: tierra, hielo, fondo
+    let best = -1, bs = 0, bp = 0;
+    CLASSES.forEach((k, j) => {
+      const p = c0 * k.u[0] + c1 * k.u[1] + c2 * k.u[2];
+      if (p <= 0) return;
+      const cos = p / cn, s = p * cos * cos;
+      if (s > bs) { bs = s; best = j; bp = p; }
+    });
+    if (best < 0 || bp / cn < 0.75) continue;   // color ambiguo
+    const amt = Math.min(1.5, bp / CLASSES[best].norm);
+    classMap[y * AW + x] = best; amtMap[y * AW + x] = amt;
+    cell[best][row][col] += amt;
+  }
+  // 3) Promedio por columna y normalización por capa
+  const col = {};
+  CLASSES.forEach((k, j) => {
+    const v = new Float32Array(COLS);
+    for (let c = 0; c < COLS; c++) { let s = 0, n = 0; for (let r = 0; r < ROWS; r++) { s += cell[j][r][c]; n += cnt[r][c]; } v[c] = s / n; }
+    const max = Math.max(...v) || 1;
+    col[k.id] = Array.from(v, x => Math.round(x / max * 1e6) / 1e6); // 6 decimales: los mismos que lee el optimizador
+  });
+  return { col, classMap, amtMap };
+}
+
+// ---------- Dibujo ----------
+const ov = document.getElementById("overlay"), og = ov.getContext("2d");
+let classLayer = null;
+function buildClassLayer() {
+  const id = og.createImageData(AW, AH);
+  for (let p = 0; p < AW * AH; p++) {
+    const j = data.classMap[p], i = p * 4;
+    if (j < 0) { id.data[i+3] = 235; continue; }
+    const [r, g, b] = CLASSES[j].rgb, a = Math.min(1, data.amtMap[p]);
+    id.data[i] = r * a; id.data[i+1] = g * a; id.data[i+2] = b * a; id.data[i+3] = 255;
+  }
+  const c = document.createElement("canvas"); c.width = AW; c.height = AH; c.getContext("2d").putImageData(id, 0, 0);
+  classLayer = c;
+}
+function draw() {
+  og.clearRect(0, 0, AW, AH);
+  if (document.getElementById("showClass").checked && classLayer) og.drawImage(classLayer, 0, 0);
+  const w = AW / COLS;
+  og.fillStyle = "rgba(0,0,0,0.35)";
+  og.fillRect(0, 0, step * w, AH); og.fillRect((step + 1) * w, 0, AW - (step + 1) * w, AH);
+  og.strokeStyle = "rgba(255,255,255,0.9)"; og.lineWidth = 1.5; og.strokeRect(step * w + 0.75, 0.75, w - 1.5, AH - 1.5);
+}
+
+// ---------- Paneles ----------
+const layersEl = document.getElementById("layers"), statusEl = document.getElementById("status");
+const ui = {};
+CLASSES.forEach(k => {
+  const d = document.createElement("div"); d.className = "layer";
+  d.innerHTML = `<header><span class="name"><span class="sw" style="background:var(${k.css})"></span>${k.name}</span>
+    <label class="role"><input type="checkbox" checked aria-label="Activar capa ${k.name}"> ${k.role}</label></header>
+    <div class="meter"><div style="background:var(${k.css})"></div></div><div class="val">—</div>`;
+  layersEl.appendChild(d);
+  ui[k.id] = { bar: d.querySelector(".meter>div"), val: d.querySelector(".val"), on: d.querySelector("input") };
+  ui[k.id].on.addEventListener("change", () => { if (audio) audio.ch[k.id].mute = !ui[k.id].on.checked; });
+});
+
+function lonRange(c) {
+  const a = -180 + c * 360 / COLS, b = a + 360 / COLS;
+  const f = v => `${Math.abs(Math.round(v))}°${v < 0 ? "O" : v > 0 ? "E" : ""}`;
+  return `${f(a)} a ${f(b)}`;
+}
+function musicFor(c) {
+  const v = k => data.col[k][c];
+  const chord = CHORDS[Math.floor(c / (COLS / CHORDS.length))];
+  const sul = v("sulfate"), dust = v("dust"), smoke = v("smoke"), salt = v("salt");
+  return {
+    chord, sul, dust, smoke, salt,
+    melody: seq.mi[c] >= 0 ? SCALE[seq.mi[c]] : null,
+    hits: seq.hits[c],
+    bass: seq.bass[c],
+  };
+}
+function updateUI(c, announce) {
+  step = c; draw();
+  const m = musicFor(c), pct = x => Math.round(x * 100) + "%";
+  const txt = {
+    sulfate: m.melody ? `${pct(m.sul)} · nota ${esNote(m.melody)}` : `${pct(m.sul)} · silencio`,
+    dust: `${pct(m.dust)} · ${m.hits} golpe${m.hits === 1 ? "" : "s"}/paso`,
+    smoke: `${pct(m.smoke)} · ${m.bass ? "bajo en " + esNote(m.smoke > 0.6 ? m.chord.fifth : m.chord.root) : "sin bajo"}`,
+    salt: `${pct(m.salt)} · acorde ${m.chord.name}`,
+  };
+  CLASSES.forEach(k => { ui[k.id].bar.style.width = pct(m[k.id === "sulfate" ? "sul" : k.id]); ui[k.id].val.textContent = txt[k.id]; });
+  if (announce) statusEl.textContent = `Columna ${c + 1} de ${COLS}, longitud ${lonRange(c)}. Sulfatos ${txt.sulfate}. Polvo ${txt.dust}. Humo ${txt.smoke}. Sal marina ${txt.salt}.`;
+}
+
+// ---------- Audio ----------
+function buildAudio() {
+  const reverb = new Tone.Reverb({ decay: 5, wet: 0.35 }).toDestination();
+  const ch = {}; CLASSES.forEach(k => { ch[k.id] = new Tone.Channel({ mute: !ui[k.id].on.checked }).connect(reverb); });
+  const melody = new Tone.Synth({ oscillator: { type: "triangle" }, envelope: { attack: 0.01, decay: 0.25, sustain: 0.25, release: 0.8 } }).connect(ch.sulfate);
+  melody.volume.value = -6;
+  const noiseFilter = new Tone.Filter(2600, "bandpass").connect(ch.dust);
+  const noise = new Tone.NoiseSynth({ noise: { type: "pink" }, envelope: { attack: 0.001, decay: 0.09, sustain: 0 } }).connect(noiseFilter);
+  const kick = new Tone.MembraneSynth({ octaves: 4, envelope: { attack: 0.001, decay: 0.35, sustain: 0 } }).connect(ch.dust);
+  kick.volume.value = -8;
+  const bass = new Tone.MonoSynth({ oscillator: { type: "sawtooth" }, filter: { Q: 2, type: "lowpass" },
+    envelope: { attack: 0.02, decay: 0.3, sustain: 0.5, release: 0.6 },
+    filterEnvelope: { attack: 0.01, decay: 0.25, sustain: 0.3, baseFrequency: 70, octaves: 2.6 } }).connect(ch.smoke);
+  bass.volume.value = -10;
+  const padVol = new Tone.Volume(-30).connect(ch.salt);
+  const pad = new Tone.PolySynth(Tone.Synth, { oscillator: { type: "sine" }, envelope: { attack: 1.2, decay: 0.5, sustain: 0.8, release: 2.5 } }).connect(padVol);
+  pad.volume.value = -8;
+  return { ch, melody, noise, kick, bass, pad, padVol };
+}
+function playStep(c, time) {
+  const m = musicFor(c), a = audio, stepDur = Tone.Time("8n").toSeconds();
+  if (m.melody) a.melody.triggerAttackRelease(m.melody, m.sul > 0.7 ? "4n" : "8n", time, 0.25 + 0.75 * m.sul);
+  for (let h = 0; h < m.hits; h++) a.noise.triggerAttackRelease("32n", time + h * stepDur / m.hits, 0.25 + 0.6 * m.dust);
+  if (m.dust > 0.6 && c % 2 === 0) a.kick.triggerAttackRelease("C1", "8n", time, m.dust);
+  if (m.bass) a.bass.triggerAttackRelease(m.smoke > 0.6 && c % 2 ? m.chord.fifth : m.chord.root, "8n", time, 0.3 + 0.7 * m.smoke);
+  a.padVol.volume.rampTo(Tone.gainToDb(0.03 + 0.5 * m.salt), stepDur * 0.9, time);
+  if (c % (COLS / CHORDS.length) === 0) a.pad.triggerAttackRelease(m.chord.notes, "1m", time, 0.6);
+}
+
+async function togglePlay() {
+  const btn = document.getElementById("play");
+  if (!data) return;
+  if (!audio) { await Tone.start(); audio = buildAudio(); await Tone.loaded(); }
+  if (playing) {
+    Tone.Transport.pause(); playing = false; btn.textContent = "▶ Reproducir"; updateUI(step, true); return;
+  }
+  Tone.Transport.cancel();
+  let c = step;
+  Tone.Transport.scheduleRepeat(time => {
+    const cur = c; c = (c + 1) % COLS;
+    playStep(cur, time);
+    Tone.Draw.schedule(() => updateUI(cur, false), time);
+  }, "8n");
+  Tone.Transport.start(); playing = true; btn.textContent = "⏸ Pausar";
+  statusEl.textContent = "Reproduciendo de oeste a este. Pausa para escuchar la descripción de la columna actual.";
+}
+async function audition(c) {
+  updateUI(c, true);
+  if (playing) { Tone.Transport.pause(); playing = false; document.getElementById("play").textContent = "▶ Reproducir"; }
+  if (!audio) { await Tone.start(); audio = buildAudio(); }
+  playStep(c, Tone.now() + 0.05);
+}
+
+document.getElementById("play").addEventListener("click", togglePlay);
+document.getElementById("bpm").addEventListener("input", e => { Tone.Transport.bpm.value = +e.target.value; document.getElementById("bpmv").textContent = e.target.value + " BPM"; });
+document.getElementById("showClass").addEventListener("change", draw);
+ov.addEventListener("click", e => { const r = ov.getBoundingClientRect(); audition(Math.min(COLS - 1, Math.floor((e.clientX - r.left) / r.width * COLS))); });
+document.addEventListener("keydown", e => {
+  if (e.target.tagName === "INPUT" && e.target.type === "range") return;
+  if (e.code === "Space") { e.preventDefault(); togglePlay(); }
+  else if (e.key === "ArrowRight") { e.preventDefault(); audition((step + 1) % COLS); }
+  else if (e.key === "ArrowLeft") { e.preventDefault(); audition((step - 1 + COLS) % COLS); }
+});
+
+// ---------- Exportar características para el optimizador ----------
+function featuresJSON() {
+  const r = a => a.map(v => Math.round(v * 1e6) / 1e6);
+  return JSON.stringify({
+    cols: COLS, image: "Aerosols_2025-08-19T20_00_00_1920x1080.png (NASA SVS 5669)",
+    palette: Object.fromEntries(CLASSES.map(k => [k.id, k.rgb])),
+    layers: Object.fromEntries(CLASSES.map(k => [k.id, r(data.col[k.id])])),
+  }, null, 2);
+}
+document.getElementById("export").addEventListener("click", () => {
+  if (!data) return;
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([featuresJSON()], { type: "application/json" }));
+  a.download = "features.json"; a.click(); URL.revokeObjectURL(a.href);
+});
+
+// ---------- Frente de Pareto ----------
+const PARAM_ES = { smoothMel: "Suavizado melodía", smoothRhy: "Suavizado ritmo", sulThr: "Umbral sulfatos", gamma: "Curva de tono (γ)",
+  pitchLow: "Nota más grave", pitchSpan: "Rango (notas)", dust1: "Polvo → 1 golpe", dust2: "Polvo → 2 golpes", dust4: "Polvo → 4 golpes", smokeThr: "Umbral humo" };
+function fmtParam(k, v) { return k === "pitchLow" ? esNote(SCALE[v]) : Number.isInteger(v) ? String(v) : v.toFixed(2); }
+
+function drawFront(sel) {
+  const cv = document.getElementById("front"), g = cv.getContext("2d"), W = cv.width, H = cv.height, pad = 36;
+  const pts = [...pareto.front, pareto.manual];
+  const fx = pts.map(p => p.fidelity), my = pts.map(p => p.musicality);
+  const x0 = Math.min(...fx) - 0.02, x1 = Math.max(...fx) + 0.02, y0 = Math.min(...my) - 0.02, y1 = Math.max(...my) + 0.02;
+  const X = v => pad + (v - x0) / (x1 - x0) * (W - pad - 12), Y = v => H - pad - (v - y0) / (y1 - y0) * (H - pad - 12);
+  g.clearRect(0, 0, W, H);
+  g.strokeStyle = "#243040"; g.beginPath(); g.moveTo(pad, 12); g.lineTo(pad, H - pad); g.lineTo(W - 12, H - pad); g.stroke();
+  g.fillStyle = "#8b98a8"; g.font = "12px system-ui"; g.fillText("Fidelidad a los datos →", W - 170, H - 12);
+  g.save(); g.translate(14, H - pad); g.rotate(-Math.PI / 2); g.fillText("Musicalidad →", 0, 0); g.restore();
+  g.strokeStyle = "#7cc4ff"; g.beginPath();
+  pareto.front.forEach((p, i) => (i ? g.lineTo : g.moveTo).call(g, X(p.fidelity), Y(p.musicality))); g.stroke();
+  pareto.front.forEach((p, i) => { g.fillStyle = i === sel ? "#fff" : "#7cc4ff"; g.beginPath(); g.arc(X(p.fidelity), Y(p.musicality), i === sel ? 6 : 3, 0, 7); g.fill(); });
+  const m = pareto.manual; g.strokeStyle = "#ffb454"; g.lineWidth = 2;
+  g.beginPath(); g.moveTo(X(m.fidelity) - 5, Y(m.musicality) - 5); g.lineTo(X(m.fidelity) + 5, Y(m.musicality) + 5);
+  g.moveTo(X(m.fidelity) + 5, Y(m.musicality) - 5); g.lineTo(X(m.fidelity) - 5, Y(m.musicality) + 5); g.stroke(); g.lineWidth = 1;
+  g.fillStyle = "#ffb454"; g.fillText("manual", X(m.fidelity) + 8, Y(m.musicality) + 4);
+}
+
+function selectSolution(i, manual) {
+  const s = manual ? pareto.manual : pareto.front[i];
+  setParams({ ...s.params });
+  document.getElementById("scores").innerHTML =
+    `<dt>Solución</dt><dd>${manual ? "Parámetros manuales" : `${i + 1} de ${pareto.front.length} del frente`}</dd>
+     <dt>Fidelidad</dt><dd>${(s.fidelity * 100).toFixed(1)} %</dd>
+     <dt>Musicalidad</dt><dd>${(s.musicality * 100).toFixed(1)} %</dd>` +
+    Object.entries(s.params).map(([k, v]) => `<dt>${PARAM_ES[k] || k}</dt><dd>${fmtParam(k, v)}</dd>`).join("");
+  drawFront(manual ? -1 : i);
+  statusEl.textContent = `${manual ? "Parámetros manuales" : "Solución " + (i + 1) + " del frente de Pareto"}: fidelidad ${(s.fidelity * 100).toFixed(0)} %, musicalidad ${(s.musicality * 100).toFixed(0)} %.`;
+}
+
+async function loadPareto() {
+  let res; try { res = await fetch("data/pareto.json", { cache: "no-store" }); } catch { return; }
+  if (!res.ok) return;
+  pareto = await res.json();
+  // Verificación: el motor JS debe producir exactamente la misma música que el motor C#
+  let mismatches = 0;
+  for (const s of [pareto.manual, ...pareto.front]) {
+    const q = compile(s.params);
+    if (q.mi.some((v, c) => v !== s.melody[c]) || q.hits.some((v, c) => v !== s.hits[c])) mismatches++;
+  }
+  const n = pareto.front.length, mid = Math.floor(n / 2);
+  document.getElementById("paretoBody").innerHTML = `
+    <div class="pareto-grid">
+      <div>
+        <canvas id="front" width="640" height="300" role="img" aria-label="Frente de Pareto: ${n} soluciones que intercambian fidelidad por musicalidad; la cruz naranja son los parámetros manuales."></canvas>
+        <p class="note">${pareto.library} · ${pareto.generations} generaciones · ${pareto.evaluations} evaluaciones · semilla ${pareto.seed} · hipervolumen ${pareto.hypervolume}.
+        ${mismatches ? `<b style="color:#ff7b72">⚠ ${mismatches} soluciones no coinciden entre C# y JS.</b>` : "Motor C# y JS verificados: producen la misma secuencia."}</p>
+      </div>
+      <div>
+        <label for="balance" style="display:block">Elige una solución del frente</label>
+        <input id="balance" type="range" min="0" max="${n - 1}" value="${mid}" aria-valuetext="">
+        <div class="slider-ends"><span>Más musical</span><span>Más científico</span></div>
+        <dl class="scores" id="scores"></dl>
+        <button id="useManual" class="secondary" type="button">Usar parámetros manuales</button>
+      </div>
+    </div>`;
+  const sl = document.getElementById("balance");
+  sl.addEventListener("input", () => { selectSolution(+sl.value, false); sl.setAttribute("aria-valuetext", statusEl.textContent); });
+  document.getElementById("useManual").addEventListener("click", () => selectSolution(0, true));
+  selectSolution(mid, false);
+  if (mismatches) console.warn("Soluciones que no coinciden entre C# y JS:", mismatches);
+}
+
+Tone.Transport.bpm.value = 88;
+analyze().then(async d => {
+  data = d; setParams({ ...MANUAL }); buildClassLayer(); updateUI(0, false);
+  statusEl.textContent = `Imagen analizada en ${COLS} columnas × ${ROWS} franjas. Pulsa Reproducir o usa las flechas para recorrer el planeta.`;
+  window.__jukebox = { data, CLASSES, featuresJSON };
+  await loadPareto();
+}).catch(err => { statusEl.textContent = "No se pudo analizar la imagen: " + err.message; console.error(err); });
+</script>
+</body>
+</html>

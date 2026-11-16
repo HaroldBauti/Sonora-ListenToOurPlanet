@@ -1,0 +1,51 @@
+@using SONORA.Client.Models
+@using System.Globalization
+
+@* Gráfico del frente de Pareto (SVG). La información también está en texto junto al deslizador. *@
+<svg class="pareto-chart" viewBox="0 0 @W @H" role="img" aria-label="@AriaLabel">
+    <line x1="@Pad" y1="12" x2="@Pad" y2="@(H - Pad)" class="axis" />
+    <line x1="@Pad" y1="@(H - Pad)" x2="@(W - 12)" y2="@(H - Pad)" class="axis" />
+    <text x="@(W - 14)" y="@(H - 10)" text-anchor="end" class="axis-label">Fidelidad a los datos →</text>
+    <text x="14" y="@(H - Pad)" transform="rotate(-90 14 @(H - Pad))" class="axis-label">Musicalidad →</text>
+    <polyline class="front-line" points="@Points" />
+    @for (int i = 0; i < Result.Front.Count; i++)
+    {
+        var s = Result.Front[i];
+        bool sel = !UseManual && i == Selected;
+        <circle cx="@F(X(s.Fidelity))" cy="@F(Y(s.Musicality))" r="@F(sel ? 7 : 3.5)" class="@(sel ? "pt sel" : "pt")" />
+    }
+    @{
+        var m = Result.Manual; double mx = X(m.Fidelity), my = Y(m.Musicality);
+    }
+    <g class="@(UseManual ? "manual sel" : "manual")">
+        <line x1="@F(mx - 6)" y1="@F(my - 6)" x2="@F(mx + 6)" y2="@F(my + 6)" />
+        <line x1="@F(mx + 6)" y1="@F(my - 6)" x2="@F(mx - 6)" y2="@F(my + 6)" />
+        <text x="@F(mx + 10)" y="@F(my + 4)">manual</text>
+    </g>
+</svg>
+
+@code {
+    [Parameter, EditorRequired] public ParetoResult Result { get; set; } = default!;
+    [Parameter] public int Selected { get; set; }
+    [Parameter] public bool UseManual { get; set; }
+
+    const double W = 640, H = 300, Pad = 40;
+    double x0, x1, y0, y1;
+
+    protected override void OnParametersSet()
+    {
+        var all = Result.Front.Append(Result.Manual).ToList();
+        x0 = all.Min(p => p.Fidelity) - 0.01; x1 = all.Max(p => p.Fidelity) + 0.01;
+        y0 = all.Min(p => p.Musicality) - 0.02; y1 = all.Max(p => p.Musicality) + 0.02;
+        if (x1 - x0 < 1e-6) x1 = x0 + 0.02;
+        if (y1 - y0 < 1e-6) y1 = y0 + 0.02;
+    }
+
+    double X(double v) => Pad + (v - x0) / (x1 - x0) * (W - Pad - 16);
+    double Y(double v) => H - Pad - (v - y0) / (y1 - y0) * (H - Pad - 16);
+    static string F(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
+    string Points => string.Join(" ", Result.Front.Select(s => $"{F(X(s.Fidelity))},{F(Y(s.Musicality))}"));
+
+    string AriaLabel => $"Frente de Pareto con {Result.Front.Count} soluciones. La fidelidad va de {Pct(Result.Front.Min(s => s.Fidelity))} a {Pct(Result.Front.Max(s => s.Fidelity))} y la musicalidad de {Pct(Result.Front.Min(s => s.Musicality))} a {Pct(Result.Front.Max(s => s.Musicality))}. Los parámetros manuales tienen fidelidad {Pct(Result.Manual.Fidelity)} y musicalidad {Pct(Result.Manual.Musicality)}.";
+    static string Pct(double v) => $"{Math.Round(v * 100, 1).ToString(CultureInfo.GetCultureInfo("es-ES"))} %";
+}

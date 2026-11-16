@@ -1,0 +1,131 @@
+@* Tendencias climáticas de Perú (datos y red neuronal de TrendDetective). La red ordena las variables;
+   las 4 elegidas se convierten en melodía, ritmo, bajo y armonía, y cada paso musical es un año. *@
+@inject HttpClient Http
+
+<fieldset class="peru tendencias" aria-describedby="tendHelp">
+    <legend>📈 Tendencias del clima en Perú <span class="hint">(datos NASA + red neuronal de TrendDetective)</span></legend>
+    <p id="tendHelp" class="hint">
+        Escucha cómo cambió el clima de una región año por año. La red neuronal sugiere qué variables están cambiando
+        (★); las 4 elegidas suenan como melodía, ritmo, bajo y armonía, en ese orden. Si una variable sube con los años, su nota sube.
+    </p>
+    @if (cat is null)
+    {
+        <p class="hint" role="status">Cargando las tendencias…</p>
+    }
+    else if (cat.Estado != "listo")
+    {
+        <p class="hint" role="status">Las tendencias no están disponibles: @cat.Error</p>
+    }
+    else
+    {
+        <div class="peru-grid">
+            <label>Región
+                <select value="@region" @onchange="e => SetRegion(e.Value?.ToString())" disabled="@Busy">
+                    @foreach (var r in cat.Regiones)
+                    {
+                        <option value="@r.Id">@r.Nombre</option>
+                    }
+                </select>
+            </label>
+            <label>Datos
+                <select value="@fuente" @onchange="e => SetFuente(e.Value?.ToString())" disabled="@Busy">
+                    @foreach (var f in cat.Fuentes)
+                    {
+                        <option value="@f.Id">@f.Nombre (@f.AnioMin–@f.AnioMax)</option>
+                    }
+                </select>
+            </label>
+        </div>
+
+        @if (Fuente?.Red is { } red)
+        {
+            <p class="hint">
+                ★ = sugerencia de la red (entrenada con 199 regiones del mundo; acierta el @Math.Round(red.Accuracy * 100) % en regiones que no vio).
+                «Real» es lo que dicen los datos (Mann-Kendall).
+                @if (Vars.Any(v => v.RegionNoVista))
+                {
+                    <b> La red nunca vio esta región.</b>
+                }
+            </p>
+        }
+
+        <ul class="tend-list" aria-label="Variables de @Region?.Nombre">
+            @foreach (var v in Vars.Take(showAll ? Vars.Count : 8))
+            {
+                int idx = chosen.IndexOf(v.Codigo);
+                <li>
+                    <label title="@v.Que">
+                        <input type="checkbox" checked="@(idx >= 0)" disabled="@(Busy || (idx < 0 && chosen.Count >= 4))" @onchange="() => Toggle(v.Codigo)" />
+                        <span class="tend-name">@(v.PTendencia is double pt && pt >= 0.5 ? "★ " : "")@v.Nombre</span>
+                        @if (v.PTendencia is double p)
+                        {
+                            <span class="tend-prob">red @Math.Round(p * 100) %</span>
+                        }
+                        <span class="tend-real @v.Tendencia">real: @Real(v)</span>
+                        @if (idx >= 0)
+                        {
+                            <span class="tend-role">→ @Rol[idx]</span>
+                        }
+                    </label>
+                </li>
+            }
+        </ul>
+        @if (Vars.Count > 8)
+        {
+            <button type="button" class="btn btn-outline small" @onclick="() => showAll = !showAll">@(showAll ? "Ver menos" : $"Ver las {Vars.Count} variables")</button>
+        }
+        <div class="peru-actions">
+            <button type="button" class="btn" disabled="@(Busy || chosen.Count == 0)" @onclick="Listen">▶ Escuchar @(Fuente?.AnioMin)–@(Fuente?.AnioMax) año por año</button>
+            <button type="button" class="btn btn-outline" disabled="@Busy" @onclick="Suggested">★ Usar las 4 que sugiere la red</button>
+        </div>
+    }
+</fieldset>
+
+@code {
+    [Parameter] public bool Busy { get; set; }
+    /// <summary>Recibe la URL de <c>/api/tendencias/serie</c> para cargarla como serie de mapas.</summary>
+    [Parameter] public EventCallback<string> OnListen { get; set; }
+
+    static readonly string[] Rol = ["melodía", "ritmo", "bajo", "armonía"];
+    TendenciasCatalog? cat;
+    string region = "piura", fuente = "power";
+    List<string> chosen = [];
+    bool showAll;
+
+    TendenciasRegion? Region => cat?.Regiones.FirstOrDefault(r => r.Id == region);
+    TendenciasFuente? Fuente => cat?.Fuentes.FirstOrDefault(f => f.Id == fuente);
+    List<TendenciasVariable> Vars => Region?.Variables.Where(v => v.Fuente == fuente).ToList() ?? [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { cat = await Http.GetFromJsonAsync<TendenciasCatalog>("api/tendencias/catalogo"); }
+        catch (Exception ex) { cat = new TendenciasCatalog("error", ex.Message, "", [], []); }
+        if (cat is { Estado: "listo" })
+        {
+            if (cat.Regiones.All(r => r.Id != region)) region = cat.Regiones[0].Id;
+            if (cat.Fuentes.All(f => f.Id != fuente)) fuente = cat.Fuentes[0].Id;
+            Suggested();
+        }
+    }
+
+    void SetRegion(string? id) { region = id ?? region; Suggested(); }
+    void SetFuente(string? id) { fuente = id ?? fuente; Suggested(); }
+
+    /// <summary>Las 4 primeras del catálogo: ya vienen ordenadas por la probabilidad que da la red.</summary>
+    void Suggested() => chosen = Vars.Take(4).Select(v => v.Codigo).ToList();
+
+    void Toggle(string code)
+    {
+        if (!chosen.Remove(code) && chosen.Count < 4) chosen.Add(code);
+    }
+
+    static string Real(TendenciasVariable v) => v.Tendencia switch
+    {
+        "sube" => "▲ sube",
+        "baja" => "▼ baja",
+        _ => "— sin tendencia",
+    };
+
+    Task Listen() => OnListen.InvokeAsync(
+        $"api/tendencias/serie?region={Uri.EscapeDataString(region)}&fuente={Uri.EscapeDataString(fuente)}&vars={Uri.EscapeDataString(string.Join(',', chosen))}");
+}

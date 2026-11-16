@@ -1,0 +1,8 @@
+<Solution>
+  <Folder Name="/entrenamiento/">
+    <Project Path="entrenamiento/BiomasPeru.Core/BiomasPeru.Core.csproj" />
+    <Project Path="entrenamiento/BiomasPeru/BiomasPeru.csproj" />
+  </Folder>
+  <Project Path="SONORA/SONORA.Client/SONORA.Client.csproj" />
+  <Project Path="SONORA/SONORA/SONORA.csproj" />
+</Solution>

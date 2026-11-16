@@ -1,0 +1,1349 @@
+﻿@page "/"
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject HttpClient Http
+
+<PageTitle>SONORA · Listen to our planet</PageTitle>
+
+<div class="sonora @(largeText ? "large-text" : "") @(highContrast ? "high-contrast" : "")">
+    <a class="skip-link" href="#player">Saltar al reproductor</a>
+
+    <header class="hero">
+        <div class="brand">
+            <span class="logo" aria-hidden="true"></span>
+            <div>
+                <h1 tabindex="-1">SONORA</h1>
+                <p class="slogan" lang="en">LISTEN TO OUR PLANET</p>
+            </div>
+        </div>
+        @if (translatorNote is not null)
+        {
+            <p class="hint" role="status" data-no-tr lang="en">@translatorNote</p>
+        }
+        <p class="lead">Convierte las visualizaciones de la Tierra de la NASA —o tu propia imagen o video— en música que se puede escuchar, explorar y entender sin necesidad de verla.</p>
+    </header>
+
+    <main>
+        <!-- ===================== Fuente ===================== -->
+        <section class="card source" aria-labelledby="srcTitle">
+            <h2 id="srcTitle">1. Elige qué escuchar</h2>
+            <TabBar Prefix="src" Label="Qué escuchar" Tabs="SrcTabs" Active="@srcTab" ActiveChanged="SetSrcTab" />
+
+            <div id="src-panel-eic" role="tabpanel" aria-labelledby="src-tab-eic" class="tabpanel" hidden="@(srcTab != "eic")">
+                <EicJukebox @ref="eicBox" Busy="busy" OnListen="LoadEic" OnSample="LoadSample" />
+            </div>
+
+            <div id="src-panel-archivo" role="tabpanel" aria-labelledby="src-tab-archivo" class="tabpanel" hidden="@(srcTab != "archivo")">
+            <div class="source-grid">
+                <div class="upload">
+                    <label for="mediaFile" class="btn btn-outline">⬆ Sube una imagen o video</label>
+                    <InputFile id="mediaFile" @ref="fileInput" OnChange="OnFileChanged" accept="image/*,video/*" disabled="@busy" class="visually-hidden" aria-describedby="uploadHelp" />
+                    <p id="uploadHelp" class="hint">PNG, JPG, WebP, MP4 o WebM (máx. 300 MB). Se procesa en tu navegador: el archivo no se sube a ningún servidor.</p>
+                </div>
+                <div class="describe-own">
+                    <label for="userDesc">Descripción de tu archivo (opcional, recomendado para accesibilidad)</label>
+                    <textarea id="userDesc" rows="2" @bind="userDescription" placeholder="Ej.: Temperatura del mar en el Pacífico durante El Niño 2023"></textarea>
+                </div>
+            </div>
+            </div>
+
+            <div id="src-panel-biomas" role="tabpanel" aria-labelledby="src-tab-biomas" class="tabpanel" hidden="@(srcTab != "biomas")">
+            <fieldset class="peru" aria-describedby="peruHelp">
+                <legend>🇵🇪 Biomas de Perú <span class="hint">(red neuronal + datos NASA, generado al instante)</span></legend>
+                @if (biomas is null)
+                {
+                    <p class="hint" role="status">Consultando el atlas de biomas…</p>
+                }
+                else
+                {
+                    <div class="peru-grid">
+                        <label>Mapa
+                            <select @bind="bTipo" disabled="@busy">
+                                @foreach (var t in biomas.Tipos)
+                                {
+                                    <option value="@t.Id">@t.Nombre</option>
+                                }
+                            </select>
+                        </label>
+                        <label>Región
+                            <select @bind="bRegion" disabled="@busy">
+                                @foreach (var r in biomas.Regiones)
+                                {
+                                    <option value="@r.Id">@r.Nombre</option>
+                                }
+                            </select>
+                        </label>
+                        <label>Año
+                            <input type="range" min="@biomas.AnioMin" max="@biomas.AnioMax" @bind="bAnio" @bind:event="oninput"
+                                   disabled="@(busy || BTipo?.UsaAnio != true)" aria-valuetext="@(BTipo?.UsaAnio == true ? bAnio.ToString() : "no aplica")" />
+                            <span class="val">@(BTipo?.UsaAnio == true ? bAnio.ToString() : $"{biomas.AnioMin}–{biomas.AnioMax}")</span>
+                        </label>
+                    </div>
+                    <p id="peruHelp" class="hint">@BTipo?.Descripcion Capas: @string.Join(", ", BTipo?.Paleta.Select(p => $"{p.Name} ({Roles.Es(p.Role)})") ?? [])</p>
+                    <div class="peru-actions">
+                        <button type="button" class="btn" @onclick="() => LoadBiomas(bTipo, BTipo?.UsaAnio == true ? bAnio : null, bRegion)" disabled="@(busy || !BiomasReady)">🎧 Escuchar mapa</button>
+                        <button type="button" class="btn btn-outline" @onclick="() => LoadBiomasSerie(bTipo, bRegion)" disabled="@(busy || !BiomasReady || BTipo?.UsaAnio != true)">▶ Escuchar @biomas.AnioMin–@biomas.AnioMax año por año</button>
+                        @if (BiomasReady)
+                        {
+                            <a href="@($"api/biomas/mapa?tipo={bTipo}&region={bRegion}&estilo=vista" + (BTipo?.UsaAnio == true ? $"&anio={bAnio}" : ""))" target="_blank" rel="noopener">Ver versión detallada ↗</a>
+                        }
+                    </div>
+                    @if (!BiomasReady)
+                    {
+                        <p class="hint" role="status">@(biomas.Estado == "error" ? $"El atlas no está disponible: {biomas.Error}" : $"Preparando el atlas en el servidor ({biomas.Estado})… tarda unos segundos al arrancar.")</p>
+                    }
+                }
+            </fieldset>
+            </div>
+
+            <div id="src-panel-clima" role="tabpanel" aria-labelledby="src-tab-clima" class="tabpanel" hidden="@(srcTab != "clima")">
+                <TendenciasPeru Busy="busy" OnListen="LoadTendencias" />
+            </div>
+
+            <div id="src-panel-mundo" role="tabpanel" aria-labelledby="src-tab-mundo" class="tabpanel" hidden="@(srcTab != "mundo")">
+
+            <fieldset class="world" aria-describedby="worldHelp">
+                <legend>🌎 Todo el planeta <span class="hint">(cobertura terrestre de la NASA, 2001–2024)</span></legend>
+                <p id="worldHelp" class="hint">
+                    Mueve el mapa o elige un lugar y pulsa «Escuchar esta zona». Se usa la clasificación oficial MODIS IGBP de la NASA
+                    (no la red neuronal, que está entrenada solo con Perú), agrupada en 4 capas: Bosque (melodía), Agricultura y urbano (ritmo),
+                    Sabana, matorral y pastizal (bajo) y Desierto y hielo (armonía). Solo suena el recuadro claro del centro (lo gris queda fuera; máximo 40° de lado). Para elegir tu propia zona, mantén Mayús y arrastra sobre el mapa; clic derecho vuelve al recuadro automático.
+                </p>
+                <div class="world-grid">
+                    <label>Lugar
+                        <select value="@worldPlace" @onchange="OnWorldPlace" disabled="@busy">
+                            <option value="">— Elige un lugar o mueve el mapa —</option>
+                            @foreach (var p in WorldPlaces)
+                            {
+                                <option value="@p.Id">@p.Name</option>
+                            }
+                        </select>
+                    </label>
+                    <label>Año
+                        <input type="range" min="2001" max="2024" value="@wAnio" @oninput="OnWorldYear" disabled="@busy" aria-valuetext="@wAnio" />
+                        <span class="val">@wAnio</span>
+                    </label>
+                </div>
+                <div class="world-map" @ref="worldMapEl" role="application" aria-label="Mapa del mundo con la cobertura terrestre de la NASA. Usa las flechas para moverte y más o menos para acercarte." tabindex="0"></div>
+                <div class="peru-actions">
+                    <button type="button" class="btn" @onclick="() => LoadMundo(false)" disabled="@busy">🎧 Escuchar esta zona (@wAnio)</button>
+                    <button type="button" class="btn btn-outline" @onclick="() => LoadMundo(true)" disabled="@busy">▶ Escuchar 2001–2024 año por año</button>
+                </div>
+            </fieldset>
+            </div>
+            @if (busy)
+            {
+                <div class="progress" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="@progressPct" aria-label="Progreso del análisis">
+                    <div style="width:@(progressPct)%"></div>
+                </div>
+                <p class="hint">@progressMsg</p>
+            }
+            @if (error is not null)
+            {
+                <p class="error" role="alert">@error</p>
+            }
+        </section>
+
+        <!-- ===================== Reproductor ===================== -->
+        <section id="player" class="card" aria-labelledby="playerTitle" tabindex="-1">
+            <h2 id="playerTitle">2. Escucha@(analysis is null ? "" : $": {analysis.Title}")</h2>
+            @if (analysis?.Event is { } yearEvent)
+            {
+                <p class="landmark-now event">📅 Este año: @yearEvent</p>
+            }
+            <p class="landmark-now" role="status" aria-live="polite">@(current?.Landmark is { } lmNow ? $"📍 Aquí: {lmNow}" : "")</p>
+
+            <div class="stage-row">
+                <div class="stage" @ref="stage" role="application" tabindex="0"
+                     aria-roledescription="explorador sonoro"
+                     aria-label="@StageLabel" aria-describedby="kbdHelp">
+                    <img @ref="img" alt="" hidden />
+                    <video @ref="video" hidden muted playsinline aria-hidden="true"></video>
+                    <canvas @ref="canvas" aria-hidden="true"></canvas>
+                </div>
+                @* Leyenda (año o periodo, colores y valores): la llena sonora.js; el texto ya llega por la región aria-live *@
+                <aside class="geo-legend" @ref="legendEl" aria-hidden="true" hidden></aside>
+            </div>
+            <p id="kbdHelp" class="hint">
+                <kbd>Espacio</kbd> reproducir o pausar · <kbd>←</kbd> <kbd>→</kbd> pasos · <kbd>↑</kbd> <kbd>↓</kbd> explorar franjas · <kbd>Esc</kbd> volver al paso completo · <kbd>A</kbd> asistente de voz · <kbd>M</kbd> manos libres · <kbd>L</kbd> leer la página · <kbd>D</kbd> describir · <kbd>V</kbd> voz · <kbd>E</kbd> escala · <kbd>1</kbd>–<kbd>5</kbd> capas · <kbd>H</kbd> ayuda
+            </p>
+
+            <div class="controls">
+                <button type="button" class="btn btn-play" @onclick="TogglePlay" disabled="@(analysis is null)" aria-keyshortcuts="Space">
+                    @(current?.Playing == true ? "⏸ Pausar" : "▶ Reproducir")
+                </button>
+                <label>Tempo <input type="range" min="50" max="160" value="@tempo" @oninput="OnTempo" aria-valuetext="@($"{tempo} pulsos por minuto")" /> <span class="val">@tempo BPM</span></label>
+                <label>Volumen <input type="range" min="0" max="100" value="@volume" @oninput="OnVolume" aria-valuetext="@($"{volume} por ciento")" /> <span class="val">@volume %</span></label>
+                @if (analysis?.Scan == "years")
+                {
+                    <label>Segundos por año <input type="range" min="1" max="10" value="@yearSec" @oninput="OnYearSec" aria-valuetext="@($"{yearSec} segundos por año, {yearSec * analysis.Steps} segundos la serie completa")" /> <span class="val">@yearSec s</span></label>
+                }
+                @if (scales.Count > 0)
+                {
+                    <label>Escala
+                        <select value="@scaleId" @onchange="OnScale" aria-describedby="scale-desc" aria-keyshortcuts="E">
+                            @foreach (var sc in scales)
+                            {
+                                <option value="@sc.Id">@sc.Name</option>
+                            }
+                        </select>
+                    </label>
+                }
+                @if (analysis?.Mode == "image")
+                {
+                    <label><input type="checkbox" checked="@showClass" @onchange="OnShowClass" /> Ver capas detectadas</label>
+                }
+                <button type="button" class="btn btn-outline" @onclick="DescribeCurrent" disabled="@(current is null)" aria-keyshortcuts="D">🗣 Describir este paso</button>
+                <button type="button" class="btn btn-outline @(recording == "audio" ? "is-listening" : "")" @onclick="() => Record(false)"
+                        disabled="@(analysis is null || busy || recording == "video")" aria-pressed="@(recording == "audio" ? "true" : "false")">
+                    @(recording == "audio" ? "⏹ Grabando… (pulsa para terminar)" : "⏺ Descargar audio de la pieza")
+                </button>
+                <button type="button" class="btn btn-outline @(recording == "video" ? "is-listening" : "")" @onclick="() => Record(true)"
+                        disabled="@(analysis is null || busy || recording == "audio")" aria-pressed="@(recording == "video" ? "true" : "false")">
+                    @(recording == "video" ? "⏹ Grabando video… (pulsa para terminar)" : "🎬 Descargar video con sonido")
+                </button>
+            </div>
+            @if (Scale is { } curScale)
+            {
+                <p id="scale-desc" class="hint scale-desc">Escala <strong>@curScale.Name</strong>, @curScale.Mood. Notas: @curScale.Notes. Acordes: @curScale.Chords.</p>
+            }
+
+            <div class="now" aria-hidden="true">@(current is null || analysis is null ? "" : Describer.Short(current, analysis))</div>
+            <div class="status" role="status" aria-live="polite" aria-atomic="true">@status</div>
+
+            <TabBar Prefix="pl" Label="Detalles de lo que suena" Tabs="PlayerTabs" Active="@playerTab" ActiveChanged="SetPlayerTab" />
+
+            <div id="pl-panel-capas" role="tabpanel" aria-labelledby="pl-tab-capas" class="tabpanel" hidden="@(playerTab != "capas")">
+            @if (analysis is null)
+            {
+                <p class="hint">Elige arriba qué escuchar para ver sus capas.</p>
+            }
+            @if (analysis is not null)
+            {
+                <fieldset class="scan">
+                    <legend>Recorrido</legend>
+                    <label>
+                        <input type="radio" name="scan" checked="@(analysis.Scan != "radar")" disabled="@(analysis.Mode != "image" || busy || optimizing)" @onchange='() => SetScan("linear")' />
+                        Lineal (@(analysis.Scan == "years" ? "año por año" : analysis.Mode == "video" ? "en el tiempo del video" : analysis.Box is not null ? "de oeste a este" : "de izquierda a derecha"))
+                    </label>
+                    <label>
+                        <input type="radio" name="scan" checked="@(analysis.Scan == "radar")" disabled="@(analysis.Mode != "image" || busy || optimizing)" @onchange='() => SetScan("radar")' />
+                        Radar (gira desde un centro, como Caldwell 73 de la NASA)
+                    </label>
+                    @if (analysis.Scan == "radar")
+                    {
+                        <button type="button" class="btn btn-small btn-outline" @onclick="ResetCenter" disabled="@(busy || optimizing)">Centrar en la imagen</button>
+                    }
+                    <p class="hint">
+                        @(analysis.Mode != "image"
+                            ? "El radar está disponible solo para imágenes."
+                            : "En modo radar, haz doble clic en la imagen para mover el centro (por ejemplo, sobre el ojo de un huracán). Las flechas ↑ ↓ recorren anillos desde el centro.")
+                    </p>
+                </fieldset>
+            }
+
+            @if (analysis is not null)
+            {
+                <div class="layers">
+                    @foreach (var (l, i) in analysis.Layers.Select((l, i) => (l, i)))
+                    {
+                        var v = current?.Values.GetValueOrDefault(l.Role) ?? 0;
+                        <div class="layer @(muted[l.Role] ? "is-muted" : "")">
+                            <div class="layer-head">
+                                <span class="sw" style="background:@Rgb(l.Rgb)" aria-hidden="true"></span>
+                                <span class="layer-name">@l.Name</span>
+                                <label class="layer-toggle">
+                                    <input type="checkbox" checked="@(!muted[l.Role])" @onchange="e => OnMute(l.Role, !(bool)e.Value!)" aria-keyshortcuts="@(i + 1)" />
+                                    @Roles.Es(l.Role)
+                                </label>
+                            </div>
+                            <div class="meter" aria-hidden="true"><div style="width:@(Math.Round(v * 100))%;background:@Rgb(l.Rgb)"></div></div>
+                            <div class="val">
+                                @Describer.Pct(v)
+                                @if (current is not null && Describer.ChangeMark(l.Role, current) is { } chg)
+                                {
+                                    <span class="delta @(chg.StartsWith('▲') ? "up" : chg.StartsWith('▼') ? "down" : "")" title="Cambio respecto al año anterior, en puntos">@chg</span>
+                                }
+                                · @(current is null ? "—" : Describer.LayerDetail(l.Role, current))
+                            </div>
+                        </div>
+                    }
+                    @if (analysis.Points is { Count: > 0 } pts)
+                    {
+                        var n = current?.Points ?? 0;
+                        <div class="layer @(muted["points"] ? "is-muted" : "")">
+                            <div class="layer-head">
+                                <span class="sw sw-points" aria-hidden="true"></span>
+                                <span class="layer-name">Destellos</span>
+                                <label class="layer-toggle">
+                                    <input type="checkbox" checked="@(!muted["points"])" @onchange='e => OnMute("points", !(bool)e.Value!)' aria-keyshortcuts="5" />
+                                    marimba / glock.
+                                </label>
+                            </div>
+                            <div class="meter" aria-hidden="true"><div class="meter-points" style="width:@(Math.Min(100, n * 100 / 6))%"></div></div>
+                            <div class="val">@(current is null ? "—" : Describer.PointsText(current)) · @pts.Count en total</div>
+                        </div>
+                    }
+                </div>
+            }
+            </div>
+
+            <div id="pl-panel-mapa" role="tabpanel" aria-labelledby="pl-tab-mapa" class="tabpanel" hidden="@(playerTab != "mapa")">
+                @if (analysis?.Box is null)
+                {
+                    <p class="hint">@(analysis is null ? "Elige arriba qué escuchar." : "Esta fuente no tiene coordenadas geográficas: el mapa con contexto está disponible para Biomas de Perú, Clima de Perú, Todo el planeta y el ejemplo de aerosoles.")</p>
+                }
+                <div class="ctx-wrap @(analysis?.Box is null ? "is-hidden" : "")">
+                    <p class="hint ctx-caption">🗺 Mapa con contexto (OpenStreetMap): lo que está en gris no suena; el recuadro amarillo marca el paso que está sonando. Arrastra, usa la rueda o los botones + y − para acercarte.</p>
+                    <div class="ctx-map" @ref="ctxMapEl" aria-hidden="true"></div>
+                </div>
+            </div>
+
+            <div id="pl-panel-info" role="tabpanel" aria-labelledby="pl-tab-info" class="tabpanel" hidden="@(playerTab != "info")">
+            @if (analysis is null)
+            {
+                <p class="hint">Elige arriba qué escuchar para ver su descripción.</p>
+            }
+            else
+            {
+                <h3>Descripción de la imagen</h3>
+                <p>@analysis.Alt</p>
+                @if (analysis.Context is not null)
+                {
+                    <h3>Contexto científico</h3>
+                    <p>@analysis.Context</p>
+                }
+                <h3>Cómo suena cada capa</h3>
+                @if (Scale is { } sc2)
+                {
+                    <p>Todas las notas salen de la escala <strong>@sc2.Name</strong> (@sc2.Mood): @sc2.Notes. Progresión de acordes: @sc2.Chords.</p>
+                }
+                <ul class="mapping">
+                    @foreach (var l in analysis.Layers)
+                    {
+                        <li><span class="sw" style="background:@Rgb(l.Rgb)" aria-hidden="true"></span> <strong>@l.Name</strong> → @Roles.Es(l.Role) (@Roles.Instrument(l.Role)). @RoleRule(l.Role)</li>
+                    }
+                    @if (analysis.Points is { Count: > 0 })
+                    {
+                        <li><span class="sw sw-points" aria-hidden="true"></span> <strong>Destellos</strong> (puntos brillantes aislados) → marimba si son rojos, naranjas o amarillos; glockenspiel si son azules o blancos. Cada uno suena cuando el barrido pasa por él; @(analysis.Scan == "radar" ? "más lejos del centro, más agudo" : "más arriba, más agudo").</li>
+                    }
+                </ul>
+                <h3>Resumen del recorrido</h3>
+                <ul>
+                    @foreach (var line in summary)
+                    {
+                        <li>@line</li>
+                    }
+                </ul>
+                @if (analysis.Source is "upload" or "eic")
+                {
+                    <p class="hint">Los colores se agruparon automáticamente en 4 familias (k-means). La más extensa suena como armonía de fondo; las demás como melodía, ritmo y bajo. Las intensidades son relativas dentro de @(analysis.Source == "eic" ? "esta visualización" : "tu archivo").</p>
+                }
+                else
+                {
+                    <p class="hint">Cada píxel se compara con los colores de la barra oficial de la NASA. Las intensidades son relativas dentro de esta imagen, no concentraciones absolutas.</p>
+                }
+            }
+            </div>
+
+        </section>
+
+        @* Asistente flotante: botón fijo abajo a la derecha que abre el panel (también con la tecla A). *@
+        <button type="button" class="assistant-fab @(assistantOpen ? "open" : "") @(listening ? "is-listening" : "")" @onclick="ToggleAssistant"
+                aria-expanded="@(assistantOpen ? "true" : "false")" aria-controls="assistantPanel"
+                aria-label="@(assistantOpen ? "Cerrar el asistente" : "Abrir el asistente de voz")" title="@(assistantOpen ? "Cerrar el asistente" : "Abrir el asistente de voz")">
+            <span aria-hidden="true">@(assistantOpen ? "✕" : listening ? "🎙" : thinking ? "⏳" : "🤖")</span>
+        </button>
+        <div id="assistantPanel" class="assistant-float" hidden="@(!assistantOpen)" role="dialog" aria-modal="false" aria-labelledby="assistantTitle"
+             @onkeydown="OnAssistantKey">
+            <div class="assistant" role="group" aria-labelledby="assistantTitle">
+                <div class="assistant-head">
+                    <h3 id="assistantTitle">Asistente de voz</h3>
+                    <button type="button" class="btn btn-small btn-outline" @onclick="ToggleAssistant" aria-label="Cerrar el asistente">✕</button>
+                </div>
+                <div class="assistant-bar">
+                    <button type="button" class="btn @(listening ? "is-listening" : "")" @onclick="ToggleListen" disabled="@(!voiceInSupported || thinking)"
+                            aria-keyshortcuts="A" aria-pressed="@(listening ? "true" : "false")">
+                        @(listening ? "⏹ Escuchando… (pulsa para terminar)" : thinking ? "⏳ Pensando…" : "🎙 Hablar con SONORA")
+                    </button>
+                    <form class="assistant-ask" @onsubmit="AskTyped" @onsubmit:preventDefault>
+                        <label for="askText" class="visually-hidden">Escribe una pregunta o una orden para el asistente</label>
+                        <input id="askText" type="text" @bind="typed" @bind:event="oninput" autocomplete="off" disabled="@thinking"
+                               placeholder="O escribe: ¿dónde hay más polvo?" />
+                        <button type="submit" class="btn btn-outline" disabled="@(thinking || string.IsNullOrWhiteSpace(typed))">Preguntar</button>
+                    </form>
+                </div>
+                <div class="assistant-bar">
+                    <button type="button" class="btn btn-small btn-outline @(handsFree ? "is-listening" : "")" @onclick="() => SetHandsFree(!handsFree)"
+                            disabled="@(!voiceInSupported)" aria-pressed="@(handsFree ? "true" : "false")" aria-keyshortcuts="M">
+                        @(handsFree ? "🔁 Manos libres activado" : "🔁 Manos libres")
+                    </button>
+                    <button type="button" class="btn btn-small btn-outline" @onclick="ReadPage" aria-keyshortcuts="L">📖 Leer la página</button>
+                </div>
+                <p class="hint">
+                    <strong>Navegar solo con la voz:</strong> «lee la página», «para de leer», «sigue leyendo», «siguiente sección»,
+                    «qué secciones hay», «qué hay aquí», «ve a accesibilidad», «abre la pestaña clima», «pulsa descargar video»,
+                    «activa alto contraste», «qué visualizaciones hay», «escucha la número 3». Con <kbd>M</kbd> (manos libres)
+                    no hace falta pulsar nada: SONORA te escucha todo el tiempo.
+                </p>
+                <p class="hint">
+                    Pulsa <kbd>A</kbd> o el botón y pide lo que quieras: «haz sonar el Sahara», «busca donde hay más humo», «más lento»,
+                    «sube el volumen», «más científico», «escala blues», «solo la melodía», «centra el radar en el huracán»
+                    o una pregunta como «¿por qué hay polvo sobre el Atlántico?». Di «ayuda» para oír todas las órdenes.
+                    @(voiceInSupported ? "El reconocimiento de voz lo hace tu navegador (en Chrome, con servidores de Google); las preguntas libres las responde un modelo de OpenAI." : "Tu navegador no admite reconocimiento de voz (usa Chrome o Edge), pero puedes escribir tus preguntas.")
+                </p>
+                @if (chat.Count > 0)
+                {
+                    <ol class="chat" aria-label="Conversación con el asistente">
+                        @foreach (var turn in chat.TakeLast(8))
+                        {
+                            <li class="@turn.Role"><span class="who">@(turn.Role == "user" ? "Tú:" : "SONORA:")</span>@turn.Text</li>
+                        }
+                    </ol>
+                }
+            </div>
+        </div>
+
+        <!-- ===================== Accesibilidad ===================== -->
+        <section class="card" aria-labelledby="a11yTitle">
+            <h2 id="a11yTitle">3. Accesibilidad</h2>
+            <div class="a11y-grid">
+                <fieldset>
+                    <legend>Narración por voz</legend>
+                    <label><input type="checkbox" checked="@speech" @onchange="OnSpeech" disabled="@(!speechSupported)" aria-keyshortcuts="V" /> Leer en voz alta cada paso y los lugares destacados</label>
+                    <label>Velocidad <input type="range" min="0.6" max="1.8" step="0.1" value="@speechRate.ToString(System.Globalization.CultureInfo.InvariantCulture)" @oninput="OnSpeechRate" aria-valuetext="@($"{speechRate:0.0} veces")" /> <span class="val">@speechRate.ToString("0.0")×</span></label>
+                    <p class="hint">@(speechSupported ? "Si ya usas un lector de pantalla (NVDA, JAWS, VoiceOver, TalkBack) puedes dejarla apagada: las descripciones se anuncian automáticamente." : "Tu navegador no admite síntesis de voz.")</p>
+                </fieldset>
+                <fieldset>
+                    <legend>Retroalimentación táctil</legend>
+                    <label><input type="checkbox" checked="@haptics" @onchange="OnHaptics" disabled="@(!hapticsSupported)" /> Vibrar con el ritmo y el bajo</label>
+                    <button type="button" class="btn btn-small btn-outline" @onclick="TestHaptics" disabled="@(!hapticsSupported)">Probar vibración</button>
+                    <p class="hint">@(hapticsSupported ? "Pulso largo = bajo (humo / capa grave); pulsos cortos = golpes de ritmo." : "Este dispositivo o navegador no admite vibración (funciona en Chrome para Android).")</p>
+                </fieldset>
+                <fieldset>
+                    <legend>Visualización</legend>
+                    <label><input type="checkbox" checked="@highContrast" @onchange="e => highContrast = (bool)e.Value!" /> Alto contraste</label>
+                    <label><input type="checkbox" checked="@largeText" @onchange="e => largeText = (bool)e.Value!" /> Texto grande</label>
+                </fieldset>
+                <fieldset>
+                    <legend>Texto descriptivo</legend>
+                    <button type="button" class="btn btn-small" @onclick="DownloadTranscript" disabled="@(analysis is null)">⬇ Descargar descripción completa (.txt)</button>
+                    <button type="button" class="btn btn-small btn-outline" @onclick="ShowHelp" aria-keyshortcuts="H">⌨ Atajos de teclado</button>
+                    <p class="hint">La transcripción describe la imagen, el contexto científico y cada paso musical.</p>
+                </fieldset>
+            </div>
+        </section>
+
+    </main>
+
+    <footer>
+        <p>Datos: NASA Earth Information Center y Scientific Visualization Studio (SVS 5669, 5603, 5688, 5687, 5572, 5436, 5554, 5624, 5616), GMAO (GEOS), NASA GIBS, POWER y Giovanni. Proyecto para el NASA Space Apps Challenge 2026 · The Earth Information Jukebox.</p>
+        <p>Optimización: HBA.Evolutionary · Audio: Tone.js</p>
+    </footer>
+
+    <dialog @ref="helpDialog" aria-labelledby="helpTitle" class="help">
+        <h2 id="helpTitle">Atajos de teclado</h2>
+        <table>
+            <tbody>
+                <tr><th scope="row"><kbd>Espacio</kbd></th><td>Reproducir o pausar (al pausar se describe el paso actual)</td></tr>
+                <tr><th scope="row"><kbd>←</kbd> <kbd>→</kbd></th><td>Paso anterior o siguiente (suena y se describe)</td></tr>
+                <tr><th scope="row"><kbd>Inicio</kbd> <kbd>Fin</kbd></th><td>Primer o último paso</td></tr>
+                <tr><th scope="row"><kbd>↑</kbd> <kbd>↓</kbd></th><td>Modo exploración: recorre las 8 franjas horizontales (latitudes en el mapa de la NASA) o, en modo radar, los 8 anillos desde el centro</td></tr>
+                <tr><th scope="row"><kbd>Esc</kbd></th><td>Salir de la exploración y volver al paso completo</td></tr>
+                <tr><th scope="row"><kbd>A</kbd></th><td>Hablar con el asistente de voz (vuelve a pulsar para terminar). Di «ayuda» para oír las órdenes</td></tr>
+                <tr><th scope="row"><kbd>M</kbd></th><td>Modo manos libres: el asistente te escucha todo el tiempo, sin pulsar nada (vuelve a pulsar para apagarlo)</td></tr>
+                <tr><th scope="row"><kbd>L</kbd></th><td>Leer toda la página en voz alta; vuelve a pulsar para detener o seguir donde iba</td></tr>
+                <tr><th scope="row"><kbd>Ctrl</kbd> / <kbd>Esc</kbd></th><td>Callar la lectura de la página</td></tr>
+                <tr><th scope="row"><kbd>D</kbd></th><td>Describir con detalle el paso actual</td></tr>
+                <tr><th scope="row"><kbd>V</kbd></th><td>Activar o desactivar la narración por voz</td></tr>
+                <tr><th scope="row"><kbd>1</kbd>–<kbd>5</kbd></th><td>Silenciar o activar cada capa (melodía, ritmo, bajo, armonía, destellos)</td></tr>
+                <tr><th scope="row">Doble clic</th><td>En modo radar, mueve el centro del giro a ese punto de la imagen</td></tr>
+                <tr><th scope="row"><kbd>E</kbd></th><td>Cambiar a la siguiente escala musical (pentatónica, mayor, menor, dórica, blues, hirajoshi, tonos enteros)</td></tr>
+                <tr><th scope="row"><kbd>H</kbd></th><td>Mostrar esta ayuda</td></tr>
+            </tbody>
+        </table>
+        <p class="hint">Con lector de pantalla, entra en el explorador sonoro (zona de la imagen) para que las flechas lleguen a SONORA.</p>
+        <button type="button" class="btn" @onclick="CloseHelp">Cerrar</button>
+    </dialog>
+</div>
+
+@code {
+    IJSObjectReference? js;
+    DotNetObjectReference<Home>? self;
+    ElementReference stage, canvas, img, video, helpDialog;
+    InputFile? fileInput;
+
+    AnalysisInfo? analysis;
+    StepInfo? current;
+    List<string> summary = [];
+    ParetoResult? pareto;
+    int selected, mismatches;
+    bool useManual, optimizing;
+
+    bool busy, loading;
+    int progressPct;
+    string progressMsg = "", status = "Cargando SONORA…";
+    string? error;
+    string userDescription = "";
+
+    int tempo = 88, volume = 80, yearSec = 4;
+    List<ScaleInfo> scales = [];
+    string scaleId = "pent-minor";
+    ScaleInfo? Scale => scales.FirstOrDefault(s => s.Id == scaleId);
+    bool showClass, speech, haptics, highContrast, largeText, speechSupported, hapticsSupported;
+    double speechRate = 1.0;
+    readonly Dictionary<string, bool> muted = Roles.All.Append("points").ToDictionary(r => r, _ => false);
+
+    // Asistente de voz
+    bool listening, thinking, voiceInSupported;
+    string typed = "", lastReply = "";
+    readonly List<AssistantTurn> chat = [];
+    DateTime quietUntil; // mientras el asistente actúa, los avisos de OnStep no pisan su respuesta
+
+    // Biomas de Perú (/api/biomas)
+    BiomasCatalog? biomas;
+    string bTipo = "biomas", bRegion = "peru";
+    int bAnio = 2024;
+    BiomasTipo? BTipo => biomas?.Tipos.FirstOrDefault(t => t.Id == bTipo);
+    bool BiomasReady => biomas?.Estado == "listo";
+
+    ParetoSolution Selection => useManual || pareto!.Front.Count == 0 ? pareto!.Manual : pareto.Front[selected];
+
+    // Posición del deslizador de equilibrio en 0–100 (0 = lo más musical, 100 = lo más científico).
+    int BalancePct => pareto is { Front.Count: > 1 } p ? (int)Math.Round(selected * 100.0 / (p.Front.Count - 1)) : 50;
+
+    string StageLabel => analysis is null
+        ? "Explorador sonoro. Cargando."
+        : $"Explorador sonoro de {analysis.Title}. {analysis.Alt} Usa las flechas para recorrer y Espacio para reproducir.";
+
+    string BalanceText => pareto is null ? "" :
+        $"Solución {selected + 1} de {pareto.Front.Count}: fidelidad {Describer.Pct(pareto.Front[selected].Fidelity)}, musicalidad {Describer.Pct(pareto.Front[selected].Musicality)}";
+
+    static string Rgb(int[] c) => $"rgb({c[0]},{c[1]},{c[2]})";
+
+    string RoleRule(string role) => role switch
+    {
+        "melody" => $"Más intensidad = nota más aguda y más fuerte (escala {Scale?.Name.ToLowerInvariant() ?? "pentatónica menor"}, en do).",
+        "rhythm" => "Más intensidad = más golpes por paso (1, 2 o 4) y bombo cuando es muy densa.",
+        "bass" => "Suena cuando la capa aparece; su intensidad controla el volumen.",
+        "pad" => "Acordes Do menor, La♭, Mi♭ y Si♭ a lo largo del recorrido; su cantidad controla el volumen.",
+        _ => ""
+    };
+
+    static IEnumerable<(string, string)> ParamRows(MappingParams p)
+    {
+        string N(double v) => v.ToString("0.00", System.Globalization.CultureInfo.GetCultureInfo("es-ES"));
+        yield return ("Suavizado melodía", N(p.SmoothMel));
+        yield return ("Suavizado ritmo", N(p.SmoothRhy));
+        yield return ("Umbral melodía", N(p.MelThr));
+        yield return ("Curva de tono (γ)", N(p.Gamma));
+        yield return ("Rango de notas", $"{p.PitchSpan} desde la nota {p.PitchLow + 1} de 15");
+        yield return ("Ritmo → 1 / 2 / 4 golpes", $"{N(p.Rhy1)} / {N(p.Rhy2)} / {N(p.Rhy4)}");
+        yield return ("Umbral bajo", N(p.BassThr));
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        js = await JS.InvokeAsync<IJSObjectReference>("import", "./js/sonora.js");
+        self = DotNetObjectReference.Create(this);
+        await js.InvokeVoidAsync("init", self, stage, canvas, img, video);
+        await js.InvokeVoidAsync("setTempo", tempo);
+        scales = await js.InvokeAsync<List<ScaleInfo>>("scales");
+        speechSupported = await js.InvokeAsync<bool>("speechSupported");
+        hapticsSupported = await js.InvokeAsync<bool>("hapticsSupported");
+        voiceInSupported = await js.InvokeAsync<bool>("listenSupported");
+        // Idioma automático: la cultura del navegador (CultureInfo.CurrentUICulture en Blazor WebAssembly).
+        // Español si el navegador está en español; inglés en cualquier otro idioma. La voz y el asistente lo siguen.
+        if (System.Globalization.CultureInfo.CurrentUICulture.TwoLetterISOLanguageName != "es") await ApplyLang("en");
+        await js.InvokeAsync<bool>("initWorldMap", worldMapEl, wAnio);
+        await js.InvokeAsync<bool>("initContextMap", ctxMapEl);
+        await js.InvokeAsync<bool>("initLegend", legendEl);
+        _ = WatchBiomasCatalog();
+        await LoadSample();
+    }
+
+    // ---------- Biomas de Perú ----------
+
+    /// <summary>Lee el catálogo y, mientras el servidor prepara el atlas, vuelve a consultar cada 3 s (hasta 3 minutos).</summary>
+    async Task WatchBiomasCatalog()
+    {
+        for (int i = 0; i < 60; i++)
+        {
+            try
+            {
+                biomas = await Http.GetFromJsonAsync<BiomasCatalog>("api/biomas/catalogo");
+                if (biomas is not null) bAnio = Math.Clamp(bAnio, biomas.AnioMin, biomas.AnioMax);
+                StateHasChanged();
+                if (biomas?.Estado is "listo" or "error") return;
+            }
+            catch (HttpRequestException) { }
+            await Task.Delay(3000);
+        }
+    }
+
+    async Task<BiomasInfo> FetchBiomas(string url)
+    {
+        var resp = await Http.GetAsync(url);
+        if (!resp.IsSuccessStatusCode)
+        {
+            var problem = await resp.Content.ReadFromJsonAsync<System.Text.Json.JsonElement>();
+            string msg = problem.TryGetProperty("detail", out var d) ? d.GetString()! : problem.TryGetProperty("error", out var e) ? e.GetString()! : resp.ReasonPhrase ?? "error";
+            throw new InvalidOperationException(msg);
+        }
+        return (await resp.Content.ReadFromJsonAsync<BiomasInfo>())!;
+    }
+
+    Task LoadBiomas(string tipo, int? anio, string region)
+    {
+        (bTipo, bRegion) = (tipo, region);
+        if (anio is int a) bAnio = a;
+        string url = $"api/biomas/info?tipo={tipo}&region={region}" + (anio is int y ? $"&anio={y}" : "");
+        return Run(async () => await js!.InvokeAsync<AnalysisInfo>("loadGeoImage", await FetchBiomas(url)), optimize: true);
+    }
+
+    Task LoadBiomasSerie(string tipo, string region)
+    {
+        (bTipo, bRegion) = (tipo, region);
+        return Run(async () => await js!.InvokeAsync<AnalysisInfo>("loadGeoSeries", await FetchBiomas($"api/biomas/serie?tipo={tipo}&region={region}")), optimize: true);
+    }
+
+    // ---------- Tendencias del clima en Perú (datos y red de TrendDetective, /api/tendencias) ----------
+    Task LoadTendencias(string url) =>
+        Run(async () => await js!.InvokeAsync<AnalysisInfo>("loadGeoSeries", await FetchBiomas(url)), optimize: true);
+
+    // ---------- Idioma (español / inglés) ----------
+    string lang = "es";
+    string? translatorNote;
+    async Task ApplyLang(string l)
+    {
+        if (js is null) return;
+        lang = l;
+        var state = await js.InvokeAsync<string>("setLang", l);
+        // Sin el traductor del navegador solo se traducen los textos fijos; se avisa una vez, en inglés.
+        translatorNote = l == "en" && state is "none" or "unavailable"
+            ? "English mode: the interface and the NASA catalog are in English. Some descriptions generated while you listen stay in Spanish because this browser has no built-in translator (Chrome 138 or later translates them too)."
+            : l == "en" && state is "downloadable" or "downloading"
+                ? "English mode: the browser is downloading its translator; descriptions will appear in English in a moment."
+                : null;
+        StateHasChanged();
+    }
+
+    // ---------- Pestañas (fuentes y detalles del reproductor) ----------
+    static readonly List<(string Id, string Text)> SrcTabs =
+        [("eic", "🎵 Jukebox NASA (EIC)"), ("archivo", "⬆ Tu archivo"), ("biomas", "🇵🇪 Biomas de Perú"), ("clima", "📈 Clima de Perú"), ("mundo", "🌎 Todo el planeta")];
+    static readonly List<(string Id, string Text)> PlayerTabs =
+        [("capas", "🎚 Capas"), ("mapa", "🗺 Mapa"), ("info", "📖 Qué estás escuchando")];
+    string srcTab = "eic", playerTab = "capas";
+
+    async Task SetSrcTab(string id) { srcTab = id; StateHasChanged(); if (id == "mundo" && js is not null) await js.InvokeVoidAsync("refreshMaps"); }
+    async Task SetPlayerTab(string id) { playerTab = id; StateHasChanged(); if (id == "mapa" && js is not null) await js.InvokeVoidAsync("refreshMaps"); }
+
+    // ---------- Jukebox del Earth Information Center (NASA SVS) ----------
+    EicJukebox? eicBox;
+    Task LoadEic(EicItem item) => Run(async () =>
+    {
+        // Con hoja de cuadros (wwwroot/eic) no hay nada que descargar de la NASA: abre al instante.
+        if (item.Hoja is not null) return await js!.InvokeAsync<AnalysisInfo>("loadEicSprite", item);
+        if (!item.EnCache)
+        {
+            progressPct = 2; progressMsg = $"Descargando «{item.Titulo}» de NASA SVS ({item.Mb:0} MB, solo la primera vez)…";
+            StateHasChanged();
+        }
+        using (var resp = await Http.PostAsync($"api/eic/preparar/{item.Id}", null))
+            if (!resp.IsSuccessStatusCode) throw new InvalidOperationException($"NASA SVS no respondió ({(int)resp.StatusCode}). Prueba de nuevo en un momento.");
+        eicBox?.MarkCached(item.Id);
+        return await js!.InvokeAsync<AnalysisInfo>("loadEicVideo", item);
+    }, optimize: true);
+
+    // ---------- Descargar audio o video con sonido (grabación de una vuelta completa) ----------
+    string? recording; // null, "audio" o "video"
+    async Task Record(bool video)
+    {
+        if (js is null || analysis is null) return;
+        if (recording is not null) { await js.InvokeAsync<System.Text.Json.JsonElement>("recordPiece", "", video); return; } // detener antes de tiempo
+        recording = video ? "video" : "audio";
+        status = video
+            ? "Grabando el video: suena una vuelta entera con la imagen y el barrido, y luego se descarga."
+            : "Grabando la pieza completa: suena una vuelta entera y luego se descarga el audio.";
+        StateHasChanged();
+        try
+        {
+            string name = new string(analysis.Title.Select(c => char.IsLetterOrDigit(c) ? c : '-').ToArray()).Trim('-');
+            var r = await js.InvokeAsync<System.Text.Json.JsonElement>("recordPiece", "SONORA-" + (name.Length > 60 ? name[..60] : name), video);
+            string ext = r.ValueKind == System.Text.Json.JsonValueKind.String ? r.GetString()! : "";
+            status = $"{(video ? "Video" : "Audio")} descargado ({ext}). " +
+                     (ext is ".mp4" or ".m4a" ? "Se abre con cualquier reproductor." : "Ábrelo con Chrome, Edge o VLC (arrastra el archivo a una ventana del navegador).");
+        }
+        catch (JSException ex) { error = ex.Message.Split('\n')[0]; status = error; }
+        finally { recording = null; StateHasChanged(); }
+    }
+
+    // ---------- Todo el planeta (NASA GIBS, MODIS IGBP) ----------
+    ElementReference worldMapEl, ctxMapEl, legendEl;
+    int wAnio = 2024;
+    string worldPlace = "";
+    sealed record WorldPlace(string Id, string Name, double Lat, double Lon, int Zoom);
+    static readonly WorldPlace[] WorldPlaces =
+    [
+        new("rondonia", "Amazonía de Brasil: Rondônia (deforestación en espina de pez)", -10.5, -62.5, 7),
+        new("madre-de-dios", "Madre de Dios, Perú y Bolivia (minería aurífera)", -12.0, -69.5, 7),
+        new("sahara", "Sahara y Sahel (desierto que avanza hacia el sur)", 16.0, 2.0, 5),
+        new("borneo", "Borneo (palma aceitera frente a la selva)", 0.5, 114.0, 6),
+        new("congo", "Cuenca del Congo (segunda selva más grande)", -1.0, 22.0, 5),
+        new("nilo", "Valle y delta del Nilo (agricultura en el desierto)", 27.5, 31.0, 6),
+        new("india", "Llanura del Ganges, India (agricultura intensiva)", 26.5, 82.0, 6),
+        new("california", "Valle Central de California (agricultura y ciudades)", 37.0, -120.0, 6),
+        new("siberia", "Siberia (taiga y tundra)", 62.0, 105.0, 4),
+        new("groenlandia", "Groenlandia (hielo)", 72.0, -40.0, 4),
+        new("patagonia", "Patagonia (estepa y glaciares)", -47.0, -70.0, 5),
+        new("australia", "Australia interior (desierto y sabana)", -24.0, 134.0, 4),
+    ];
+
+    async Task OnWorldPlace(ChangeEventArgs e)
+    {
+        worldPlace = e.Value?.ToString() ?? "";
+        if (WorldPlaces.FirstOrDefault(p => p.Id == worldPlace) is { } p) await js!.InvokeVoidAsync("worldGoTo", p.Lat, p.Lon, p.Zoom);
+    }
+
+    async Task OnWorldYear(ChangeEventArgs e)
+    {
+        wAnio = int.Parse(e.Value!.ToString()!);
+        await js!.InvokeVoidAsync("worldSetYear", wAnio);
+    }
+
+    async Task LoadMundo(bool serie)
+    {
+        var box = await js!.InvokeAsync<GeoBox?>("worldView");
+        if (box is null) { error = "El mapa del mundo no se pudo cargar (¿sin conexión?)."; return; }
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        string name = WorldPlaces.FirstOrDefault(p => p.Id == worldPlace) is { } wp ? Uri.EscapeDataString(wp.Name.Split(" (")[0]) : "";
+        string q = string.Create(inv, $"lonMin={box.LonMin}&lonMax={box.LonMax}&latMin={box.LatMin}&latMax={box.LatMax}&nombre={name}");
+        await Run(async () => serie
+            ? await js!.InvokeAsync<AnalysisInfo>("loadGeoSeries", await FetchBiomas($"api/mundo/serie?{q}"))
+            : await js!.InvokeAsync<AnalysisInfo>("loadGeoImage", await FetchBiomas($"api/mundo/info?{q}&anio={wAnio}")), optimize: true);
+    }
+
+    /// <summary>Acción del asistente <c>load_map</c>: "tipo;año;región" o "serie;tipo;región".</summary>
+    async Task<string> LoadMapAction(string value)
+    {
+        if (biomas is null || !BiomasReady) return "El atlas de biomas aún se está preparando en el servidor. Inténtalo en unos segundos.";
+        var p = value.Split(';').Select(s => s.Trim()).ToArray();
+        bool serie = p.ElementAtOrDefault(0) == "serie";
+        string tipo = (serie ? p.ElementAtOrDefault(1) : p.ElementAtOrDefault(0)) ?? "biomas";
+        string region = p.ElementAtOrDefault(2) is { Length: > 0 } r0 ? r0 : "peru"; // la región va tercera en ambos formatos
+        if (biomas.Tipos.FirstOrDefault(t => t.Id == tipo) is not { } t) return $"No conozco el mapa «{tipo}».";
+        if (biomas.Regiones.All(r => r.Id != region)) region = "peru";
+        int? anio = !serie && t.UsaAnio && int.TryParse(p.ElementAtOrDefault(1), out var y) ? Math.Clamp(y, biomas.AnioMin, biomas.AnioMax) : null;
+
+        if (serie && t.UsaAnio) await LoadBiomasSerie(tipo, region);
+        else await LoadBiomas(tipo, t.UsaAnio ? anio ?? biomas.AnioMax : null, region);
+        return error ?? $"Listo: {analysis?.Title}.";
+    }
+
+    async Task Run(Func<Task<AnalysisInfo>> load, bool optimize)
+    {
+        if (js is null) return;
+        busy = loading = true; error = null; progressPct = 0; progressMsg = "Preparando…"; current = null;
+        StateHasChanged();
+        try
+        {
+            analysis = await load();
+            summary = Describer.Summary(analysis);
+            useManual = false;
+            foreach (var r in Roles.All) await js.InvokeVoidAsync("setMute", r, muted[r]);
+            await js.InvokeVoidAsync("setShowClass", showClass && analysis.Mode == "image");
+            busy = false;
+            StateHasChanged();
+            if (optimize) await Optimize();
+            else
+            {
+                pareto = await Http.GetFromJsonAsync<ParetoResult>("data/pareto-geos.json");
+                await ApplyPareto();
+            }
+            await js.InvokeVoidAsync("seek", 0);
+            status = $"{analysis.Title} listo: {analysis.Steps} pasos. {summary[0]} Pulsa Espacio para reproducir o usa las flechas.";
+            await Say(status);
+        }
+        catch (JSException ex) { error = ex.Message.Split('\n')[0]; status = error; }
+        catch (Exception ex) { error = $"No se pudo cargar: {ex.Message}"; status = error; }
+        finally { busy = loading = false; StateHasChanged(); }
+    }
+
+    Task LoadSample() => Run(() => js!.InvokeAsync<AnalysisInfo>("loadSample").AsTask(), optimize: false);
+
+    Task OnFileChanged(InputFileChangeEventArgs e) =>
+        Run(() => js!.InvokeAsync<AnalysisInfo>("loadFile", fileInput!.Element!.Value, userDescription).AsTask(), optimize: true);
+
+    async Task SetScan(string mode)
+    {
+        if (analysis is null || analysis.Mode != "image" || analysis.Scan == mode) return;
+        bool precomputed = analysis.Source == "sample" && mode == "linear";
+        await Run(() => js!.InvokeAsync<AnalysisInfo>("setScan", mode).AsTask(), optimize: !precomputed);
+    }
+
+    Task ResetCenter() => Run(() => js!.InvokeAsync<AnalysisInfo>("setCenter", 0.5, 0.5).AsTask(), optimize: true);
+
+    [JSInvokable]
+    public Task OnCenterRequested(double fx, double fy) =>
+        busy || optimizing ? Task.CompletedTask : Run(() => js!.InvokeAsync<AnalysisInfo>("setCenter", fx, fy).AsTask(), optimize: true);
+
+    async Task Optimize()
+    {
+        if (js is null) return;
+        optimizing = true; pareto = null; StateHasChanged();
+        try
+        {
+            var features = await js.InvokeAsync<SonificationFeatures>("features");
+            var resp = await Http.PostAsJsonAsync("api/optimize", features);
+            resp.EnsureSuccessStatusCode();
+            pareto = await resp.Content.ReadFromJsonAsync<ParetoResult>();
+            await ApplyPareto();
+            status = $"Optimización lista: {pareto!.Front.Count} soluciones. Usa el deslizador de equilibrio para elegir entre más musical y más científico.";
+        }
+        catch (Exception ex) { error = $"No se pudo optimizar: {ex.Message}. Se usan los parámetros manuales."; }
+        finally { optimizing = false; StateHasChanged(); }
+    }
+
+    async Task ApplyPareto()
+    {
+        if (pareto is null || js is null) return;
+        mismatches = await js.InvokeAsync<int>("verify", pareto);
+        selected = Math.Max(0, pareto.Front.Count / 2);
+        useManual = pareto.Front.Count == 0;
+        await js.InvokeVoidAsync("setParams", Selection.Params);
+    }
+
+    async Task OnBalance(ChangeEventArgs e)
+    {
+        selected = int.Parse(e.Value!.ToString()!); useManual = false;
+        await js!.InvokeVoidAsync("setParams", Selection.Params);
+    }
+
+    async Task UseManualParams()
+    {
+        useManual = true;
+        await js!.InvokeVoidAsync("setParams", Selection.Params);
+        status = $"Parámetros manuales: fidelidad {Describer.Pct(Selection.Fidelity)}, musicalidad {Describer.Pct(Selection.Musicality)}.";
+    }
+
+    async Task TogglePlay() { if (js is not null) await js.InvokeVoidAsync("toggle"); }
+    async Task OnScale(ChangeEventArgs e)
+    {
+        var id = e.Value?.ToString();
+        if (id is null || !await ApplyScale(id)) return;
+        status = $"Escala {Scale!.Name}: {Scale.Mood}. Notas {Scale.Notes}.";
+        await Say(status);
+    }
+
+    async Task<bool> ApplyScale(string id)
+    {
+        if (js is null || !await js.InvokeAsync<bool>("setScale", id)) return false;
+        scaleId = id;
+        if (current is { Playing: false, Row: < 0 } cur)
+        {
+            var steps = await js.InvokeAsync<List<StepInfo>>("allSteps");
+            if (cur.Step < steps.Count) current = steps[cur.Step];
+        }
+        return true;
+    }
+
+    async Task CycleScale()
+    {
+        if (scales.Count == 0) return;
+        int i = scales.FindIndex(s => s.Id == scaleId);
+        await OnScale(new ChangeEventArgs { Value = scales[(i + 1) % scales.Count].Id });
+    }
+
+    async Task OnTempo(ChangeEventArgs e) { tempo = int.Parse(e.Value!.ToString()!); await js!.InvokeVoidAsync("setTempo", tempo); }
+    async Task OnYearSec(ChangeEventArgs e) { yearSec = int.Parse(e.Value!.ToString()!); await js!.InvokeVoidAsync("setYearSeconds", yearSec); }
+    async Task OnVolume(ChangeEventArgs e) { volume = int.Parse(e.Value!.ToString()!); await js!.InvokeVoidAsync("setVolume", volume); }
+    async Task OnShowClass(ChangeEventArgs e) { showClass = (bool)e.Value!; await js!.InvokeVoidAsync("setShowClass", showClass); }
+    async Task OnMute(string role, bool isMuted) { muted[role] = isMuted; await js!.InvokeVoidAsync("setMute", role, isMuted); }
+    async Task OnHaptics(ChangeEventArgs e) { haptics = (bool)e.Value!; await js!.InvokeVoidAsync("setHaptics", haptics); if (haptics) await js!.InvokeVoidAsync("testHaptics"); }
+    async Task TestHaptics() => await js!.InvokeVoidAsync("testHaptics");
+    void OnSpeechRate(ChangeEventArgs e) => speechRate = double.Parse(e.Value!.ToString()!, System.Globalization.CultureInfo.InvariantCulture);
+
+    async Task OnSpeech(ChangeEventArgs e) => await SetSpeech((bool)e.Value!);
+
+    async Task SetSpeech(bool on)
+    {
+        speech = on;
+        if (on) await Say("Narración por voz activada.");
+        else await js!.InvokeVoidAsync("stopSpeech");
+        status = on ? "Narración por voz activada." : "Narración por voz desactivada.";
+    }
+
+    async Task Say(string text) { if (speech && js is not null) await js.InvokeAsync<bool>("speak", text, speechRate); }
+
+    async Task DescribeCurrent()
+    {
+        if (current is null || analysis is null) return;
+        status = Describer.Step(current, analysis);
+        await Say(status);
+    }
+
+    async Task DownloadTranscript()
+    {
+        if (analysis is null || js is null) return;
+        var steps = await js.InvokeAsync<List<StepInfo>>("allSteps");
+        var text = Describer.Transcript(analysis, steps, pareto is null ? null : Selection, Scale);
+        var name = "SONORA-" + string.Concat(analysis.Title.Split(Path.GetInvalidFileNameChars())).Replace(' ', '_');
+        if (name.Length > 60) name = name[..60];
+        await js.InvokeVoidAsync("downloadText", name + ".txt", text);
+        status = "Descripción completa descargada.";
+    }
+
+    async Task ShowHelp() => await js!.InvokeVoidAsync("showDialog", helpDialog);
+    async Task CloseHelp() => await js!.InvokeVoidAsync("closeDialog", helpDialog);
+
+    // ---------- Asistente de voz (panel flotante) ----------
+    bool assistantOpen;
+    async Task ToggleAssistant()
+    {
+        assistantOpen = !assistantOpen;
+        StateHasChanged();
+        if (assistantOpen && js is not null)
+        {
+            await Task.Yield();
+            try { await js.InvokeVoidAsync("focusById", "askText"); } catch (JSException) { /* opcional */ }
+        }
+    }
+    async Task OnAssistantKey(KeyboardEventArgs e)
+    {
+        if (e.Key == "Escape" && assistantOpen) await ToggleAssistant();
+    }
+    async Task ToggleListen()
+    {
+        if (js is null || thinking || !voiceInSupported) return;
+        if (!assistantOpen) { assistantOpen = true; StateHasChanged(); } // la tecla A abre el panel para ver la respuesta
+        if (listening)
+        {
+            if (handsFree) { handsFree = false; status = "Modo manos libres desactivado."; }
+            await js.InvokeVoidAsync("stopListening");
+            return;
+        }
+        var r = await ListenOnce();
+        if (!string.IsNullOrWhiteSpace(r.Text)) await Ask(r.Text);
+        else { await Reply(ListenError(r.Error)); return; }
+        if (handsFree) await HandsFreeLoop(); // "activa manos libres" se dijo en esta frase
+    }
+
+    async Task<ListenResult> ListenOnce()
+    {
+        listening = true; status = handsFree ? "Manos libres: te escucho…" : "Escuchando… habla ahora."; StateHasChanged();
+        try { return await js!.InvokeAsync<ListenResult>("listen"); }
+        finally { listening = false; StateHasChanged(); }
+    }
+
+    static string ListenError(string? error) => error switch
+    {
+        "not-allowed" or "service-not-allowed" => "No tengo permiso para usar el micrófono. Actívalo desde el candado de la barra de direcciones.",
+        "network" => "No pude conectar con el reconocimiento de voz. Revisa la conexión o escribe tu pregunta.",
+        "audio-capture" => "No encuentro ningún micrófono.",
+        "aborted" => "Cancelado.",
+        _ => "No te escuché. Pulsa A y vuelve a intentarlo."
+    };
+
+    // ---------- Modo manos libres: escucha, responde y vuelve a escuchar sin pulsar nada ----------
+    // Pensado para personas ciegas: se activa con la tecla M o diciendo «activa manos libres», y se apaga con
+    // «desactiva manos libres», «deja de escuchar», la tecla M o la A. Mientras SONORA lee la página no escucha
+    // (oiría su propia voz); Ctrl o Esc cortan la lectura y vuelve a escuchar.
+    bool handsFree, handsFreeRunning;
+    async Task HandsFreeLoop()
+    {
+        if (handsFreeRunning || js is null || !voiceInSupported) return;
+        handsFreeRunning = true;
+        try
+        {
+            int silences = 0;
+            while (handsFree)
+            {
+                await js.InvokeVoidAsync("waitReaderIdle");
+                if (!handsFree || thinking) break;
+                var r = await ListenOnce();
+                if (!handsFree) break;
+                if (!string.IsNullOrWhiteSpace(r.Text)) { silences = 0; await Ask(r.Text); continue; }
+                if (r.Error is null or "no-speech")
+                {
+                    if (++silences < 4) continue;
+                    handsFree = false;
+                    await Reply("Pongo en pausa el modo manos libres porque no te escuché. Pulsa M o A para seguir hablando.");
+                    break;
+                }
+                if (r.Error is "aborted") break;
+                handsFree = false;
+                await Reply(ListenError(r.Error));
+            }
+        }
+        finally { handsFreeRunning = false; StateHasChanged(); }
+    }
+
+    async Task ReadPage() { if (js is not null) await js.InvokeVoidAsync("toggleReading", speechRate); }
+
+    async Task SetHandsFree(bool on)
+    {
+        if (on && !voiceInSupported) { await Reply("Tu navegador no admite reconocimiento de voz. Usa Chrome o Edge para el modo manos libres."); return; }
+        handsFree = on;
+        if (!on)
+        {
+            if (listening && js is not null) await js.InvokeVoidAsync("stopListening");
+            await Reply("Modo manos libres desactivado. Pulsa M para volver a activarlo.");
+            return;
+        }
+        if (!assistantOpen) assistantOpen = true;
+        await Reply("Modo manos libres activado. Te escucho todo el tiempo: di lo que quieras, por ejemplo «lee la página». Para terminar, di «desactiva manos libres».");
+        if (!listening) _ = HandsFreeLoop();
+    }
+
+    async Task AskTyped()
+    {
+        var q = typed.Trim();
+        if (q.Length == 0 || thinking) return;
+        typed = "";
+        await Ask(q);
+        if (handsFree && !handsFreeRunning) _ = HandsFreeLoop(); // «activa manos libres» escrito
+    }
+
+    // Primero las reglas (instantáneas); si no entienden la frase, el modelo de OpenAI del servidor.
+    async Task Ask(string question)
+    {
+        chat.Add(new("user", question));
+        quietUntil = DateTime.MaxValue;
+        string reply;
+        try
+        {
+            // 1) Lectura y navegación de la página ("lee la página", "ve a accesibilidad", "pulsa descargar video"…).
+            //    "" = ya empezó a leer en voz alta: no hay que decir nada más.
+            string? pageReply = js is null ? null : await js.InvokeAsync<string?>("pageCommand", question, speechRate);
+            if (pageReply is not null)
+            {
+                if (pageReply.Length == 0) { quietUntil = DateTime.UtcNow.AddSeconds(1); StateHasChanged(); return; }
+                await Reply(pageReply);
+                return;
+            }
+            // 2) Órdenes de la música y del mapa (reglas). 3) Lo demás, al modelo.
+            if (VoiceAssistant.Parse(question, analysis, scales) is { } intent)
+            {
+                var parts = new List<string>();
+                if (intent.Reply is not null) parts.Add(intent.Reply);
+                foreach (var act in intent.Actions) parts.Add(await Execute(act));
+                reply = string.Join(" ", parts.Where(p => p.Length > 0));
+            }
+            else reply = await AskModel(question);
+        }
+        catch (Exception ex) { reply = $"Algo falló: {ex.Message}"; }
+        await Reply(reply);
+    }
+
+    async Task<string> AskModel(string question)
+    {
+        if (analysis is null) return "Primero carga una imagen o el ejemplo de la NASA.";
+        thinking = true; status = "Pensando…"; StateHasChanged();
+        try
+        {
+            string OnOff(bool on) => on ? "sí" : "no";
+            var settings = $"volumen {volume}/100; equilibrio {(pareto is null ? "sin calcular" : useManual ? "parámetros manuales" : $"{BalancePct}/100 (0 = lo más musical, 100 = lo más científico)")}" +
+                           (pareto is null ? "" : $", fidelidad {Describer.Pct(Selection.Fidelity)}, musicalidad {Describer.Pct(Selection.Musicality)}") +
+                           $"; narración {OnOff(speech)} a {speechRate.ToString("0.0", System.Globalization.CultureInfo.InvariantCulture)}x; vibración {OnOff(haptics)}" +
+                           $"; alto contraste {OnOff(highContrast)}; texto grande {OnOff(largeText)}; ver capas {OnOff(showClass)}";
+            var context = VoiceAssistant.Context(analysis, summary, current, tempo, Scale, scales, muted.Where(m => m.Value).Select(m => m.Key), settings);
+            var history = chat.SkipLast(1).TakeLast(6).ToList();
+            var resp = await Http.PostAsJsonAsync("api/assistant", new AssistantRequest(question, context, history));
+            if ((int)resp.StatusCode == 503)
+                return "No entendí esa orden y el asistente inteligente no está configurado en el servidor. Di «ayuda» para oír las órdenes.";
+            if (!resp.IsSuccessStatusCode) return "No pude consultar al asistente inteligente. Inténtalo de nuevo o di «ayuda».";
+            var r = (await resp.Content.ReadFromJsonAsync<AssistantReply>())!;
+            var parts = new List<string> { r.Reply };
+            foreach (var act in r.Actions)
+            {
+                var said = await Execute(act);
+                if (act.Type is "describe" or "summary" or "help") parts.Add(said); // el resto ya lo confirma la respuesta del modelo
+            }
+            return string.Join(" ", parts);
+        }
+        finally { thinking = false; }
+    }
+
+    async Task Reply(string text)
+    {
+        lastReply = text;
+        chat.Add(new("assistant", text));
+        if (chat.Count > 20) chat.RemoveRange(0, chat.Count - 20);
+        status = text;
+        StateHasChanged();
+        if (js is not null) await js.InvokeVoidAsync("assistantSay", text, speechRate);
+        quietUntil = DateTime.UtcNow.AddSeconds(1);
+    }
+
+    /// <summary>Ejecuta una acción del asistente (de las reglas o del modelo) y devuelve una confirmación breve.</summary>
+    async Task<string> Execute(AssistantAction act)
+    {
+        const string noMedia = "Primero carga una imagen o el ejemplo de la NASA.";
+        var inv = System.Globalization.CultureInfo.InvariantCulture;
+        int Int(int fallback) => int.TryParse(act.Value, out var n) ? n : fallback;
+        // "+20" / "-20" son relativos al valor actual; un número solo es absoluto.
+        bool relative = act.Value.StartsWith('+') || act.Value.StartsWith('-');
+        int Rel(int cur) => relative ? cur + Int(0) : Int(cur);
+        bool on = act.Value != "off";
+        switch (act.Type)
+        {
+            case "help": return VoiceAssistant.Help + " " + await js!.InvokeAsync<string>("navigationHelp");
+            case "page_help": return await js!.InvokeAsync<string>("navigationHelp");
+            case "hands_free":
+                if (on && !voiceInSupported) return "Tu navegador no admite reconocimiento de voz. Usa Chrome o Edge para el modo manos libres.";
+                handsFree = on;
+                return on ? "Modo manos libres activado. Te escucho todo el tiempo; para terminar, di «desactiva manos libres»."
+                          : "Modo manos libres desactivado. Pulsa M para volver a activarlo.";
+            case "repeat": return lastReply.Length > 0 ? lastReply : "Todavía no he dicho nada.";
+            case "narration": await SetSpeech(on); return on ? "Narración activada." : "Narración desactivada.";
+            case "load_sample": await LoadSample(); return "Ejemplo de la NASA cargado.";
+            case "load_map": return await LoadMapAction(act.Value);
+            case "set_speech_rate":
+                double.TryParse(act.Value, System.Globalization.NumberStyles.Float, inv, out var rate);
+                speechRate = Math.Round(Math.Clamp(relative ? speechRate + rate : rate, 0.6, 1.8), 1);
+                return $"Hablo a {speechRate.ToString("0.0", inv).Replace('.', ',')} veces.";
+            case "haptics":
+                if (!hapticsSupported) return "Este dispositivo no admite vibración.";
+                await OnHaptics(new ChangeEventArgs { Value = on });
+                return on ? "Vibración activada." : "Vibración desactivada.";
+            case "high_contrast": highContrast = on; return on ? "Alto contraste activado." : "Alto contraste desactivado.";
+            case "large_text": largeText = on; return on ? "Texto grande activado." : "Texto normal.";
+        }
+        if (analysis is null || js is null) return noMedia;
+        switch (act.Type)
+        {
+            case "play": await js.InvokeVoidAsync("play"); return "Reproduciendo.";
+            case "pause": await js.InvokeVoidAsync("pause"); return "En pausa.";
+            case "next": return await GoTo(((current?.Step ?? -1) + 1) % analysis.Steps);
+            case "prev": return await GoTo(((current?.Step ?? 0) - 1 + analysis.Steps) % analysis.Steps);
+            case "goto_step": return await GoTo(Math.Clamp(Int(1), 1, analysis.Steps) - 1);
+            case "play_at": return await GoTo(Math.Clamp(Int(1), 1, analysis.Steps) - 1, play: true);
+            case "play_lon":
+                // Los mapas (NASA de 180° O a 180° E, o Perú) en recorrido lineal se dividen en pasos de igual ancho de longitud.
+                if (analysis.Box is not { } box || analysis.Scan != "linear") return "Solo puedo buscar lugares en un mapa con recorrido lineal.";
+                if (!double.TryParse(act.Value, System.Globalization.NumberStyles.Float, inv, out var lon)) return "No encontré ese lugar.";
+                if (lon < box.LonMin || lon > box.LonMax) return "Ese lugar queda fuera de este mapa.";
+                return await GoTo(Math.Clamp((int)Math.Floor((lon - box.LonMin) / (box.LonMax - box.LonMin) * analysis.Steps), 0, analysis.Steps - 1), play: true);
+            case "describe": return current is null ? "" : Describer.Step(current, analysis);
+            case "summary": return $"{analysis.Alt} {summary.LastOrDefault()}";
+            case "download_transcript": await DownloadTranscript(); return "Descripción descargada.";
+            case "set_tempo":
+                tempo = Math.Clamp(Rel(tempo), 50, 160);
+                await js.InvokeVoidAsync("setTempo", tempo);
+                return $"Tempo {tempo}.";
+            case "set_volume":
+                volume = Math.Clamp(Rel(volume), 0, 100);
+                await js.InvokeVoidAsync("setVolume", volume);
+                return $"Volumen {volume} %.";
+            case "set_balance":
+                if (pareto is not { Front.Count: > 0 } pf) return "Todavía no hay soluciones para equilibrar.";
+                int pct = Math.Clamp(Rel(BalancePct), 0, 100);
+                selected = (int)Math.Round(pct / 100.0 * (pf.Front.Count - 1)); useManual = false;
+                await js.InvokeVoidAsync("setParams", Selection.Params);
+                return $"{(pct < 34 ? "Más musical" : pct > 66 ? "Más científico" : "Equilibrado")}: fidelidad {Describer.Pct(Selection.Fidelity)}, musicalidad {Describer.Pct(Selection.Musicality)}.";
+            case "manual_params":
+                if (pareto is null) return "Todavía no hay parámetros cargados.";
+                await UseManualParams();
+                return "Parámetros manuales.";
+            case "show_layers":
+                if (analysis.Mode != "image") return "Las capas solo se pueden ver en imágenes.";
+                showClass = on; await js.InvokeVoidAsync("setShowClass", on);
+                return on ? "Mostrando las capas detectadas." : "Capas ocultas.";
+            case "set_center":
+                var xy = act.Value.Split(',');
+                if (analysis.Mode != "image" || xy.Length != 2
+                    || !double.TryParse(xy[0], System.Globalization.NumberStyles.Float, inv, out var fx)
+                    || !double.TryParse(xy[1], System.Globalization.NumberStyles.Float, inv, out var fy))
+                    return "No pude mover el centro del radar.";
+                await Run(() => js!.InvokeAsync<AnalysisInfo>("setCenter", Math.Clamp(fx, 0, 1), Math.Clamp(fy, 0, 1)).AsTask(), optimize: true);
+                return "Radar centrado ahí.";
+            case "set_scale":
+                var id = act.Value == "next" ? scales[(scales.FindIndex(s => s.Id == scaleId) + 1) % scales.Count].Id : act.Value;
+                return await ApplyScale(id) ? $"Escala {Scale!.Name}, {Scale.Mood}." : "No conozco esa escala.";
+            case "mute" or "unmute" or "solo":
+                if (!muted.ContainsKey(act.Value)) return "No encontré esa capa.";
+                var name = VoiceAssistant.LayerName(analysis, act.Value);
+                if (act.Type == "solo")
+                {
+                    foreach (var r in muted.Keys.ToList()) await OnMute(r, r != act.Value);
+                    return $"Solo suena: {name}.";
+                }
+                await OnMute(act.Value, act.Type == "mute");
+                return $"{name}: {(act.Type == "mute" ? "en silencio" : "activada")}.";
+            case "unmute_all":
+                foreach (var r in muted.Keys.ToList()) await OnMute(r, false);
+                return "Todas las capas activadas.";
+            case "scan_radar" or "scan_linear":
+                if (analysis.Mode != "image") return "El recorrido radar solo está disponible para imágenes.";
+                await SetScan(act.Type == "scan_radar" ? "radar" : "linear");
+                return act.Type == "scan_radar" ? "Recorrido radar: una línea gira desde las 12 alrededor del centro." : "Recorrido lineal.";
+            default: return "";
+        }
+    }
+
+    // Salta a un paso. Con play (o si ya sonaba) la música sigue sonando desde ahí y la confirmación es mínima;
+    // sin play suena solo ese paso y se describe brevemente.
+    async Task<string> GoTo(int c, bool play = false)
+    {
+        if (js is null || analysis is null) return "";
+        bool keepPlaying = play || current?.Playing == true;
+        if (keepPlaying) await js.InvokeVoidAsync("playFrom", c);
+        else await js.InvokeVoidAsync("seek", c);
+        var info = (await js.InvokeAsync<List<StepInfo>>("allSteps"))[c];
+        current = info with { Playing = keepPlaying };
+        if (play) return $"Sonando: {(info.Landmark is { } lm ? lm.Split(':')[0].TrimEnd('.') : info.StepLabel)}.";
+        return Describer.Short(info, analysis) + (info.Landmark is null ? "" : " " + info.Landmark);
+    }
+
+    // ---------- Llamadas desde JS ----------
+    [JSInvokable]
+    public async Task OnStep(StepInfo info)
+    {
+        bool wasPlaying = current?.Playing == true;
+        current = info;
+        if (analysis is not null && !loading && DateTime.UtcNow >= quietUntil)
+        {
+            if (!info.Playing)
+            {
+                status = wasPlaying ? "Pausa. " + Describer.Step(info, analysis) : Describer.Step(info, analysis);
+                await Say(wasPlaying ? status : Describer.Short(info, analysis) + (info.Landmark is null ? "" : " " + info.Landmark));
+            }
+            else if (info.LandmarkEntered && info.Landmark is not null)
+            {
+                // El lugar se muestra (y se anuncia) bajo el título "2. Escucha"; aquí solo se narra por voz.
+                await Say(info.Landmark);
+            }
+            else if (!wasPlaying)
+            {
+                status = "Reproduciendo. Pausa con Espacio para escuchar la descripción del paso.";
+            }
+        }
+        StateHasChanged();
+    }
+
+    // ---------- Bienvenida por voz (primera interacción con la página) ----------
+    bool welcomed;
+    [JSInvokable]
+    // introState: "done" = bienvenida.js ya dijo el saludo completo; "cut" = la persona lo interrumpió o pidió otra cosa;
+    // "none" = no hubo saludo previo (sin bienvenida.js), así que se dice aquí.
+    public async Task OnFirstInteraction(bool userIsActing, string introState)
+    {
+        if (welcomed || js is null) return;
+        welcomed = true;
+        bool en = lang == "en";
+        _ = js.InvokeVoidAsync("unlockAudio").AsTask(); // la voz no lo necesita: no esperar al contexto de audio
+        if (userIsActing || introState == "cut")
+        {
+            // La persona ya pulsó algo (reproducir, escuchar, leer…): el saludo breve ya sonó (o no tocaba); no se tapa lo que pidió.
+            if (introState != "none" || listening || handsFree || await js.InvokeAsync<bool>("isReading")) return;
+            await js.InvokeAsync<bool>("speakAndWait", new[] { en ? "Welcome to SONORA." : "Bienvenido a SONORA." }, speechRate, true);
+            return;
+        }
+        // El ejemplo de la NASA suele estar listo cuando termina el saludo; si no, se espera un poco.
+        for (int i = 0; i < 24 && (analysis is null || busy); i++) await Task.Delay(250);
+        var parts = new List<string>();
+        if (introState == "none")
+        {
+            parts.Add(en ? "Welcome to SONORA. Listen to our planet." : "Bienvenido a SONORA. Listen to our planet: escucha nuestro planeta.");
+            parts.Add(en ? "It turns NASA's visualizations of Earth, or your own image or video, into music you can hear, explore and understand without needing to see it."
+                         : "Convierte las visualizaciones de la Tierra de la NASA, o tu propia imagen o video, en música que se puede escuchar, explorar y entender sin necesidad de verla.");
+        }
+        if (analysis is not null)
+        {
+            if (en)
+            {
+                parts.Add($"You are listening to: {analysis.Title}.");
+                parts.Add("Each color family is a layer: melody, rhythm, bass and harmony.");
+                parts.Add("Press Space to pause, the arrows to move, and A to talk to me.");
+                parts.Add("Press L and I will read the whole page aloud, or M to talk to me without pressing anything.");
+            }
+            else
+            {
+                parts.Add($"Estás escuchando: {analysis.Title}.");
+                parts.Add("Leyenda: " + string.Join("; ", analysis.Layers.Select(l => $"{l.Name} suena como {Roles.Es(l.Role)}, con {Roles.Instrument(l.Role)}")) + ".");
+                if (analysis.Event is { } ev) parts.Add($"Este año: {ev}.");
+                parts.Add("Pulsa Espacio para pausar, las flechas para moverte y la tecla A para hablar conmigo.");
+                parts.Add("Pulsa L y te leo toda la página, o M para hablarme sin pulsar nada.");
+            }
+        }
+        else parts.Add(en ? "Press L and I will read the whole page aloud, A to talk to me, or M to talk to me without pressing anything."
+                          : "Pulsa L y te leo toda la página, A para hablar conmigo, o M para hablarme sin pulsar nada.");
+        status = string.Join(" ", parts);
+        StateHasChanged();
+        bool finished = await js.InvokeAsync<bool>("speakAndWait", parts, speechRate, true);
+        if (!finished) return; // la persona hizo otra cosa mientras saludaba
+        // Pregunta por voz si quiere el modo manos libres (necesita reconocimiento de voz: Chrome o Edge).
+        if (voiceInSupported && !handsFree && await OfferHandsFree(en)) return;
+        if (analysis is not null && current?.Playing != true) await js.InvokeVoidAsync("play");
+    }
+
+    /// <summary>"¿Activo el modo manos libres?" y escucha la respuesta. Devuelve true si quedó activado.</summary>
+    async Task<bool> OfferHandsFree(bool en)
+    {
+        string question = en ? "Do you want me to turn on hands-free mode, so you can use SONORA only with your voice? Say yes or no."
+                             : "¿Quieres que active el modo manos libres, para usar SONORA solo con tu voz? Responde sí o no.";
+        status = question; StateHasChanged();
+        if (!await js!.InvokeAsync<bool>("speakAndWait", new[] { question }, speechRate, true)) return false;
+        bool? yes = null;
+        for (int attempt = 0; attempt < 2 && yes is null; attempt++)
+        {
+            var r = await ListenOnce();
+            if (r.Error is "not-allowed" or "service-not-allowed" or "audio-capture")
+            {
+                await Reply(ListenError(r.Error) + (en ? " You can press M later to turn on hands-free mode." : " Puedes pulsar M más tarde para activar el modo manos libres."));
+                return false;
+            }
+            yes = VoiceAssistant.YesNo(r.Text);
+            if (yes is null && attempt == 0)
+                await js!.InvokeAsync<bool>("speakAndWait", new[] { en ? "Sorry, I didn't catch that. Say yes or no." : "No te entendí. Di sí o no." }, speechRate, true);
+        }
+        if (yes != true)
+        {
+            await Reply(en ? "All right. You can turn it on later by pressing M or saying «turn on hands-free». Here comes the music."
+                           : "De acuerdo. Puedes activarlo cuando quieras pulsando M o diciendo «activa manos libres». Ahí va la música.");
+            return false;
+        }
+        handsFree = true; assistantOpen = true;
+        await Reply(en ? "Hands-free mode on. I'm listening: say «play», «read the page», «what visualizations are there» or «help». To finish, say «turn off hands-free»."
+                       : "Modo manos libres activado. Te escucho: di «reproduce», «lee la página», «qué visualizaciones hay» o «ayuda». Para terminar, di «desactiva manos libres».");
+        _ = HandsFreeLoop();
+        return true;
+    }
+
+    [JSInvokable]
+    public void OnProgress(int pct, string msg) { progressPct = pct; progressMsg = msg; StateHasChanged(); }
+
+    [JSInvokable]
+    public async Task OnShortcut(string key)
+    {
+        switch (key)
+        {
+            case "a": await ToggleListen(); break;
+            case "l": if (js is not null) await js.InvokeVoidAsync("toggleReading", speechRate); break;
+            case "m": await SetHandsFree(!handsFree); break;
+            case "d": await DescribeCurrent(); break;
+            case "e": await CycleScale(); break;
+            case "h": await ShowHelp(); break;
+            case "v": await SetSpeech(!speech); break;
+            case "1" or "2" or "3" or "4" or "5":
+                var role = key == "5" ? "points" : Roles.All[int.Parse(key) - 1];
+                if (role == "points" && analysis?.Points is not { Count: > 0 }) break;
+                await OnMute(role, !muted[role]);
+                var name = role == "points" ? "Destellos" : analysis?.Layers.FirstOrDefault(l => l.Role == role)?.Name ?? Roles.Es(role);
+                status = role == "points"
+                    ? $"Destellos {(muted[role] ? "silenciados" : "activados")}."
+                    : $"{name} ({Roles.Es(role)}) {(muted[role] ? "silenciada" : "activada")}.";
+                await Say(status);
+                break;
+        }
+        StateHasChanged();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        try { if (js is not null) { await js.InvokeVoidAsync("dispose"); await js.DisposeAsync(); } }
+        catch (JSDisconnectedException) { }
+        self?.Dispose();
+    }
+}

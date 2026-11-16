@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es"><head><meta charset="utf-8"><title>Convertidor SONORA</title></head>
+<body style="font:14px sans-serif;background:#111;color:#ddd">
+<h1>Video → hoja de cuadros (WebP)</h1>
+<pre id="log"></pre>
+<video id="v" muted playsinline preload="auto" style="display:none"></video>
+<script>
+// Mismo muestreo que SONORA (analyzeVideo): N cuadros en (i + 0.5) · duración / N.
+const N = 48, COLS = 8, FW = 480, Q = 0.8;
+const log = m => { document.getElementById("log").textContent += m + "\n"; };
+const once = (el, ev) => new Promise((ok, bad) => { el.addEventListener(ev, ok, { once: true }); el.addEventListener("error", () => bad(new Error("video ilegible")), { once: true }); });
+async function convert(name) {
+  const v = document.getElementById("v");
+  const ready = once(v, "loadeddata"); v.src = "/v/" + encodeURIComponent(name); await ready;
+  const dur = v.duration, w = FW, h = Math.round(FW * v.videoHeight / v.videoWidth / 2) * 2;
+  const rows = Math.ceil(N / COLS), c = document.createElement("canvas"); c.width = COLS * w; c.height = rows * h;
+  const g = c.getContext("2d");
+  for (let i = 0; i < N; i++) {
+    const s = once(v, "seeked"); v.currentTime = (i + 0.5) * dur / N; await s;
+    g.drawImage(v, (i % COLS) * w, Math.floor(i / COLS) * h, w, h);
+  }
+  const blob = await new Promise(r => c.toBlob(r, "image/webp", Q));
+  const id = name.replace(/\.mp4$/, "");
+  await fetch("/save?name=" + id + ".webp", { method: "POST", body: blob });
+  log(`${id}: ${N} cuadros ${w}x${h}, ${(blob.size / 1e6).toFixed(2)} MB`);
+  return { id, file: id + ".webp", frames: N, cols: COLS, rows, w, h, duration: Math.round(dur * 10) / 10, srcW: v.videoWidth, srcH: v.videoHeight };
+}
+(async () => {
+  const names = await (await fetch("/list")).json(), meta = {};
+  for (const n of names) { try { const m = await convert(n); meta[m.id] = m; } catch (e) { log(n + ": ERROR " + e.message); } }
+  await fetch("/save?name=index.json", { method: "POST", body: JSON.stringify(meta, null, 1) });
+  log("LISTO " + Object.keys(meta).length);
+  window.DONE = true;
+})();
+</script>
+</body></html>

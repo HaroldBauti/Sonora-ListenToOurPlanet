@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <BlazorDisableThrowNavigationException>true</BlazorDisableThrowNavigationException>
+    <UserSecretsId>9bd3949c-f42d-406b-9b53-011f045811d7</UserSecretsId>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="HBA.Evolutionary" Version="2.0.0" />
+    <ProjectReference Include="..\SONORA.Client\SONORA.Client.csproj" />
+    <ProjectReference Include="..\..\entrenamiento\BiomasPeru.Core\BiomasPeru.Core.csproj" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.15" />
+  </ItemGroup>
+
+  <!-- Modelo de biomas entrenado por entrenamiento/BiomasPeru (lo usa /api/biomas). -->
+  <ItemGroup>
+    <None Include="..\..\entrenamiento\BiomasPeru\salida\modelo_biomas.json" Link="Biomas\modelo_biomas.json"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- Tendencias del clima en Perú exportadas por TrendDetective.Sonora (lo usa /api/tendencias). -->
+  <ItemGroup>
+    <None Include="..\..\entrenamiento\TendenciasPeru\tendencias_peru.json" Link="Tendencias\tendencias_peru.json"
+          CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" Condition="Exists('..\..\entrenamiento\TendenciasPeru\tendencias_peru.json')" />
+  </ItemGroup>
+
+</Project>

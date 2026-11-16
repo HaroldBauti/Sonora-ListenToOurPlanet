@@ -1,0 +1,328 @@
+{
+  "generado": "2026-11-14T19:29:04.1308334-05:00",
+  "fuente": "NASA GIBS: MODIS Terra NDVI mensual (MOD13A3), MODIS Terra LST mensual, MODIS IGBP anual (MCD12Q1), SRTM. Rejilla 0,05° (~5,5 km), 2001–2024.",
+  "rejilla": {
+    "ancho": 260,
+    "alto": 370,
+    "escala_png": 3,
+    "lon_min": -81.5,
+    "lat_max": 0,
+    "resolucion_grados": 0.05
+  },
+  "biomas": [
+    {
+      "Id": 0,
+      "Nombre": "Desierto costero",
+      "color": "#E9C46A"
+    },
+    {
+      "Id": 1,
+      "Nombre": "Bosque seco ecuatorial",
+      "color": "#B08D3C"
+    },
+    {
+      "Id": 2,
+      "Nombre": "Valles y matorral andino",
+      "color": "#D4845A"
+    },
+    {
+      "Id": 3,
+      "Nombre": "Puna y páramo",
+      "color": "#A3B86C"
+    },
+    {
+      "Id": 4,
+      "Nombre": "Nival y glaciar",
+      "color": "#F1F5F9"
+    },
+    {
+      "Id": 5,
+      "Nombre": "Yungas (selva alta)",
+      "color": "#2FA36B"
+    },
+    {
+      "Id": 6,
+      "Nombre": "Selva baja amazónica",
+      "color": "#0B5D2E"
+    },
+    {
+      "Id": 7,
+      "Nombre": "Agricultura y urbano",
+      "color": "#E76F51"
+    }
+  ],
+  "caracteristicas": [
+    "ndvi_m01",
+    "ndvi_m02",
+    "ndvi_m03",
+    "ndvi_m04",
+    "ndvi_m05",
+    "ndvi_m06",
+    "ndvi_m07",
+    "ndvi_m08",
+    "ndvi_m09",
+    "ndvi_m10",
+    "ndvi_m11",
+    "ndvi_m12",
+    "lst_m01",
+    "lst_m02",
+    "lst_m03",
+    "lst_m04",
+    "lst_m05",
+    "lst_m06",
+    "lst_m07",
+    "lst_m08",
+    "lst_m09",
+    "lst_m10",
+    "lst_m11",
+    "lst_m12",
+    "altitud_km",
+    "relieve_km",
+    "latitud",
+    "vertiente_pacifico",
+    "ndvi_vecinos"
+  ],
+  "muestras": {
+    "entrenamiento": 20000,
+    "validacion": 4000,
+    "prueba": 6176,
+    "particion": "bloques espaciales de 0,5°"
+  },
+  "benchmark": {
+    "seg_por_iteracion_baja_fidelidad": 0.0933,
+    "seg_por_iteracion_completo": 0.1661
+  },
+  "busqueda": {
+    "algoritmo": "HBA.Evolutionary 2.0.0 · NSGA-II",
+    "poblacion": 20,
+    "generaciones": 25,
+    "evaluaciones": 520,
+    "entrenamientos_reales": 452,
+    "aciertos_cache": 68,
+    "parada": "MaxGenerations",
+    "baja_fidelidad": {
+      "filas": 6000,
+      "iteraciones_max": 30,
+      "paciencia": 5
+    },
+    "segundos": 384.9,
+    "entrenamiento_promedio_s": 7.27,
+    "estimacion_sin_atajos_s": 4569,
+    "evaluaciones_maximas": 500,
+    "frente_pareto": [
+      {
+        "exactitud_equilibrada": 0.8532,
+        "parametros": 1997,
+        "hiperparametros": "capas [36-18-9] Tanh, SGD lr=0.0543, lote=30, L2=0.001"
+      },
+      {
+        "exactitud_equilibrada": 0.851,
+        "parametros": 494,
+        "hiperparametros": "capas [12-6] ReLU, Adam lr=0.0319, lote=79, L2=1.6E-06"
+      },
+      {
+        "exactitud_equilibrada": 0.8475,
+        "parametros": 438,
+        "hiperparametros": "capas [11-5] ReLU, Adam lr=0.0292, lote=102, L2=2.8E-06"
+      },
+      {
+        "exactitud_equilibrada": 0.8401,
+        "parametros": 426,
+        "hiperparametros": "capas [11] ReLU, Adam lr=0.0707, lote=225, L2=2.6E-06"
+      },
+      {
+        "exactitud_equilibrada": 0.8394,
+        "parametros": 316,
+        "hiperparametros": "capas [8-4] ReLU, Adam lr=0.0319, lote=79, L2=1.6E-06"
+      },
+      {
+        "exactitud_equilibrada": 0.8218,
+        "parametros": 312,
+        "hiperparametros": "capas [8] ReLU, Adam lr=0.0326, lote=82, L2=1.6E-06"
+      }
+    ]
+  },
+  "final": {
+    "hiperparametros": "capas [36-18-9] Tanh, SGD lr=0.0543, lote=30, L2=0.001",
+    "parametros": 1997,
+    "iteraciones": 46,
+    "parada": "EarlyStopping",
+    "segundos": 46.6,
+    "prueba_exactitud_equilibrada": 0.8615,
+    "prueba_exactitud": 0.8591,
+    "recall_por_bioma": {
+      "Desierto costero": 0.8962,
+      "Bosque seco ecuatorial": 0.8175,
+      "Valles y matorral andino": 0.7925,
+      "Puna y páramo": 0.8675,
+      "Nival y glaciar": 0.9271,
+      "Yungas (selva alta)": 0.9438,
+      "Selva baja amazónica": 0.9912,
+      "Agricultura y urbano": 0.6562
+    },
+    "matriz_confusion": [
+      [
+        717,
+        52,
+        2,
+        0,
+        0,
+        0,
+        0,
+        29
+      ],
+      [
+        94,
+        654,
+        0,
+        0,
+        0,
+        0,
+        0,
+        52
+      ],
+      [
+        14,
+        1,
+        634,
+        5,
+        0,
+        97,
+        0,
+        49
+      ],
+      [
+        0,
+        0,
+        2,
+        694,
+        57,
+        0,
+        0,
+        47
+      ],
+      [
+        0,
+        0,
+        0,
+        42,
+        534,
+        0,
+        0,
+        0
+      ],
+      [
+        0,
+        0,
+        27,
+        3,
+        0,
+        755,
+        3,
+        12
+      ],
+      [
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        793,
+        7
+      ],
+      [
+        141,
+        9,
+        60,
+        58,
+        0,
+        0,
+        7,
+        525
+      ]
+    ]
+  },
+  "linea_base": {
+    "hiperparametros": "capas [32] ReLU, Adam lr=0.01, lote=32, L2=0",
+    "iteraciones": 27,
+    "parada": "EarlyStopping",
+    "segundos": 14.7,
+    "prueba_exactitud_equilibrada": 0.8636
+  },
+  "tendencias": {
+    "metodo": "Theil-Sen + Mann-Kendall (|Z| ≥ 1,96)",
+    "rango_paleta_bosque_por_anio": 0.02,
+    "rango_paleta_ndvi_por_anio": 0.006
+  },
+  "casos_de_estudio": [
+    {
+      "region": "Madre de Dios · La Pampa (minería aurífera)",
+      "celdas": 160,
+      "ndvi_tendencia_por_decada": -0.0305,
+      "pct_ndvi_bajando_significativo": 35,
+      "pct_ndvi_subiendo_significativo": 3.1,
+      "bosque_prob_2001": 0.964,
+      "bosque_prob_2024": 0.774,
+      "bioma_dominante_2024": "Selva baja amazónica"
+    },
+    {
+      "region": "Ucayali · Pucallpa (frontera agrícola)",
+      "celdas": 318,
+      "ndvi_tendencia_por_decada": 0.0026,
+      "pct_ndvi_bajando_significativo": 18.6,
+      "pct_ndvi_subiendo_significativo": 25.2,
+      "bosque_prob_2001": 0.84,
+      "bosque_prob_2024": 0.736,
+      "bioma_dominante_2024": "Selva baja amazónica"
+    },
+    {
+      "region": "Cordillera Blanca (glaciares)",
+      "celdas": 464,
+      "ndvi_tendencia_por_decada": 0.0139,
+      "pct_ndvi_bajando_significativo": 1.3,
+      "pct_ndvi_subiendo_significativo": 40.5,
+      "bosque_prob_2001": 0.004,
+      "bosque_prob_2024": 0.006,
+      "bioma_dominante_2024": "Puna y páramo"
+    },
+    {
+      "region": "Costa norte · Piura y Tumbes (bosque seco, El Niño)",
+      "celdas": 1466,
+      "ndvi_tendencia_por_decada": 0.0077,
+      "pct_ndvi_bajando_significativo": 1,
+      "pct_ndvi_subiendo_significativo": 12.7,
+      "bosque_prob_2001": 0.003,
+      "bosque_prob_2024": 0.004,
+      "bioma_dominante_2024": "Bosque seco ecuatorial"
+    },
+    {
+      "region": "Altiplano · Puno",
+      "celdas": 1280,
+      "ndvi_tendencia_por_decada": 0.0027,
+      "pct_ndvi_bajando_significativo": 3.9,
+      "pct_ndvi_subiendo_significativo": 15.6,
+      "bosque_prob_2001": 0.003,
+      "bosque_prob_2024": 0.003,
+      "bioma_dominante_2024": "Puna y páramo"
+    },
+    {
+      "region": "Selva baja · Loreto (referencia poco intervenida)",
+      "celdas": 1186,
+      "ndvi_tendencia_por_decada": 0.004,
+      "pct_ndvi_bajando_significativo": 3.6,
+      "pct_ndvi_subiendo_significativo": 13.3,
+      "bosque_prob_2001": 0.914,
+      "bosque_prob_2024": 0.932,
+      "bioma_dominante_2024": "Selva baja amazónica"
+    }
+  ],
+  "tiempos_s": {
+    "datos": 0.9,
+    "muestreo": 0.1,
+    "busqueda_hiperparametros": 384.9,
+    "entrenamiento_final": 46.6,
+    "mapas": 6,
+    "total": 440.2
+  }
+}

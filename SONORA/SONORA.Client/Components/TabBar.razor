@@ -1,0 +1,41 @@
+@* Pestañas accesibles (patrón WAI-ARIA "tabs"): ← → Inicio Fin cambian de pestaña y mueven el foco.
+   Los paneles los pinta la página con id="{Prefix}-panel-{id}" y aria-labelledby="{Prefix}-tab-{id}". *@
+
+<div class="tabbar" role="tablist" aria-label="@Label">
+    @for (int k = 0; k < Tabs.Count; k++)
+    {
+        var (id, text) = Tabs[k];
+        bool on = id == Active;
+        int idx = k;
+        <button type="button" role="tab" id="@($"{Prefix}-tab-{id}")" aria-controls="@($"{Prefix}-panel-{id}")"
+                aria-selected="@(on ? "true" : "false")" tabindex="@(on ? 0 : -1)" class="tab @(on ? "is-active" : "")"
+                @ref="refs[idx]" @onclick="() => Select(id)" @onkeydown="e => Key(e, idx)">@text</button>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired] public List<(string Id, string Text)> Tabs { get; set; } = [];
+    [Parameter, EditorRequired] public string Active { get; set; } = "";
+    [Parameter] public EventCallback<string> ActiveChanged { get; set; }
+    [Parameter, EditorRequired] public string Prefix { get; set; } = "";
+    [Parameter] public string Label { get; set; } = "";
+
+    readonly ElementReference[] refs = new ElementReference[12];
+
+    Task Select(string id) => id == Active ? Task.CompletedTask : ActiveChanged.InvokeAsync(id);
+
+    async Task Key(KeyboardEventArgs e, int idx)
+    {
+        int n = Tabs.Count, to = e.Key switch
+        {
+            "ArrowRight" => (idx + 1) % n,
+            "ArrowLeft" => (idx - 1 + n) % n,
+            "Home" => 0,
+            "End" => n - 1,
+            _ => -1,
+        };
+        if (to < 0) return;
+        await Select(Tabs[to].Id);
+        await refs[to].FocusAsync();
+    }
+}
