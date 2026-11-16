@@ -112,6 +112,11 @@ const isHeading = el => /^H[1-3]$/.test(el.tagName);
 // ---------- Lectura ----------
 let hooks = { duck: () => {}, rate: () => 1 };
 export function setReaderHooks(h) { hooks = { ...hooks, ...h }; }
+// Voz propia de SONORA. Quien usa un lector de pantalla (NVDA, JAWS, VoiceOver, TalkBack) puede apagarla para que no
+// se superpongan dos voces: los textos siguen llegando por las regiones aria-live. No se intenta detectar el lector.
+let voiceOn = true;
+export function setVoiceEnabled(on) { voiceOn = !!on; if (!voiceOn) stopReading(); }
+export function voiceEnabled() { return voiceOn; }
 const R = { list: [], i: 0, gen: 0, active: false, paused: false, at: 0, idle: [] };
 let current = null;
 function mark(el) {
@@ -149,7 +154,7 @@ export function waitReaderIdle() { return R.active ? new Promise(r => R.idle.pus
 export function isReading() { return R.active; }
 
 async function readFrom(i, list) {
-  if (!("speechSynthesis" in window)) return;
+  if (!("speechSynthesis" in window) || !voiceOn) return;
   R.list = list || blocks();
   R.i = Math.max(0, Math.min(i, R.list.length - 1));
   const gen = ++R.gen;
@@ -233,8 +238,13 @@ function listCards() {
     L("Di «escucha la número» y el número, o el nombre.", "Say «listen to number» and the number, or the name.");
 }
 
+// Palabras que nombran el tipo de control y no su nombre: «abre la pestaña clima» busca «clima».
+// Sin quitarlas, «pestaña» contaba como una palabra que no coincide y «Clima de Perú» quedaba por debajo del umbral.
+const FILLER = /\b(pestanas?|tabs?|secciones|seccion|apartados?|botones|boton|buttons?|sections?|opcion|opciones)\b/g;
+
 /** El mejor elemento para lo que nombró la persona entre los candidatos. */
 function best(target, cands) {
+  target = norm(target).replace(FILLER, " ").replace(/\s+/g, " ").trim() || target;
   let top = null, s0 = 0;
   for (const c of cands) {
     const s = Math.max(score(target, c.es), score(target, c.cur));

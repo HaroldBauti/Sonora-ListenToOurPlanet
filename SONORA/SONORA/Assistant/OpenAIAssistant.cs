@@ -35,6 +35,9 @@ public sealed class OpenAIAssistant(HttpClient http, IConfiguration config)
         - Si pide cambiar un parámetro ("más científico", "baja el volumen", "más grave", "que suene más triste"), elige la
           acción y el valor más razonables a partir del ESTADO actual del contexto.
         - Solo explica cuando te hacen una pregunta (por qué, qué es, cómo). Entonces responde en 1 a 3 frases cortas.
+        - Si lo que pide no está en la lista de acciones (por ejemplo cambiar de pestaña, abrir una sección o elegir un archivo),
+          NO digas que lo hiciste: explica en una frase cómo hacerlo (botón Asistente, guía hablada o «abre la pestaña…»).
+          Nunca confirmes una acción que no enviaste.
         - Responde siempre en español, para oírse: sin markdown, listas, emojis ni URLs.
         - Para hablar de la imagen usa el CONTEXTO. Las intensidades son relativas (0 a 100 dentro de esta imagen): no inventes
           cifras ni lugares. Puedes usar conocimiento científico general con prudencia.

@@ -1,0 +1,178 @@
+@* Guía hablada: presenta las secciones y los datos que faltan en grupos cortos de botones grandes.
+   Todo se puede hacer con teclado (Tab y Enter) o tocando; la voz es opcional. Home.razor ejecuta las acciones. *@
+
+<section class="guide" aria-labelledby="guideTitle">
+    <h3 id="guideTitle">Guía hablada</h3>
+    <p class="guide-where">
+        <strong>Estás en:</strong>
+        @(Flow.Stage == GuideStage.Menu ? "menú principal" : GuideFlow.SectionName(Flow.Section) + (Flow.CurrentSlot is { } cs ? $" › elegir {SlotLabel(cs)}" : ""))
+    </p>
+
+    @if (Flow.Chosen() is { Count: > 0 } chosen && Flow.Stage != GuideStage.Menu)
+    {
+        <ul class="guide-picks" aria-label="Tu selección">
+            @foreach (var c in chosen)
+            {
+                <li>
+                    <span>@Cap(c.SlotName): <strong>@c.Value</strong></span>
+                    <button type="button" class="btn btn-small btn-outline" @onclick="() => OnChange.InvokeAsync(c.Slot)" disabled="@Busy">Cambiar @c.SlotName</button>
+                </li>
+            }
+        </ul>
+    }
+
+    <p class="guide-prompt" id="guidePrompt">@Question</p>
+
+    @if (Flow.Stage is GuideStage.Menu or GuideStage.Choose or GuideStage.Demo)
+    {
+        <div class="guide-options" role="group" aria-labelledby="guidePrompt">
+            @{ int k = 0; }
+            @foreach (var (n, o) in Flow.PageOptions())
+            {
+                int idx = k++;
+                if (o.Id == "__file")
+                {
+                    @* El selector de archivos solo se abre con un gesto: por eso es una etiqueta del <input type=file> real. *@
+                    <label for="mediaFile" class="btn guide-opt" tabindex="0" @ref="optRefs[idx]" @onkeydown="OpenFileKey">
+                        <span class="guide-num" aria-hidden="true">@n</span> @o.Label
+                    </label>
+                }
+                else
+                {
+                    <button type="button" class="btn guide-opt @(o.Recommended ? "is-rec" : "")" @ref="optRefs[idx]" disabled="@Busy"
+                            @onclick="() => OnOption.InvokeAsync(o.Id)" aria-describedby="@(o.Detail is null ? null : $"gd-{n}")">
+                        <span class="guide-num" aria-hidden="true">@n</span>
+                        <span class="guide-label"><span class="visually-hidden">@n. </span>@o.Label@(o.Recommended ? " (recomendado)" : "")</span>
+                        @if (o.Detail is { Length: > 0 } d)
+                        {
+                            <span class="guide-detail" id="@($"gd-{n}")">@d</span>
+                        }
+                    </button>
+                }
+            }
+        </div>
+        @if (Flow.CurrentSlot == "anio")
+        {
+            <form class="guide-year" @onsubmit="SubmitYear" @onsubmit:preventDefault>
+                <label for="guideYear">O escribe el año</label>
+                <input id="guideYear" type="number" inputmode="numeric" min="@YearMin" max="@YearMax" @bind="year" />
+                <button type="submit" class="btn btn-outline" disabled="@Busy">Elegir año</button>
+            </form>
+        }
+        <div class="guide-nav" role="group" aria-label="Moverse por la guía">
+            @if (Flow.HasLess)
+            {
+                <button type="button" class="btn btn-outline" @onclick="OnLess">◀ Opciones anteriores</button>
+            }
+            @if (Flow.HasMore)
+            {
+                <button type="button" class="btn btn-outline" @onclick="OnMore">Más opciones ▶</button>
+            }
+            @if (Flow.Stage != GuideStage.Menu)
+            {
+                <button type="button" class="btn btn-outline" @onclick="OnBack">↩ Volver</button>
+                <button type="button" class="btn btn-outline" @onclick="OnMenu">☰ Menú</button>
+            }
+        </div>
+    }
+    else if (Flow.Stage == GuideStage.Loading)
+    {
+        <p class="guide-loading">Cargando… Tus elecciones se conservan si algo falla.</p>
+    }
+    else if (Flow.Stage == GuideStage.Error)
+    {
+        <div class="guide-options" role="group" aria-label="Qué hacer ahora">
+            <button type="button" class="btn guide-opt" @ref="optRefs[0]" @onclick='() => OnAction.InvokeAsync("retry")'>⟳ Reintentar</button>
+            <button type="button" class="btn guide-opt btn-outline" @onclick='() => OnAction.InvokeAsync("back")'>✎ Corregir la última elección</button>
+            <button type="button" class="btn guide-opt btn-outline" @onclick='() => OnAction.InvokeAsync("menu")'>☰ Volver al menú</button>
+        </div>
+    }
+    else if (Flow.Stage == GuideStage.Ready)
+    {
+        <div class="guide-actions" role="group" aria-label="Escuchar">
+            <button type="button" class="btn guide-opt" @ref="optRefs[0]" @onclick='() => OnAction.InvokeAsync("toggle")' disabled="@(!HasContent || Busy)">
+                @(Playing ? "⏸ Pausar" : "▶ Reproducir")
+            </button>
+            <button type="button" class="btn btn-outline" @onclick='() => OnAction.InvokeAsync("describe")' disabled="@(!HasContent)">🗣 Describir el momento</button>
+            <button type="button" class="btn btn-outline" @onclick='() => OnAction.InvokeAsync("voldown")' disabled="@(!HasContent)">🔉 Bajar volumen</button>
+            <button type="button" class="btn btn-outline" @onclick='() => OnAction.InvokeAsync("volup")' disabled="@(!HasContent)">🔊 Subir volumen</button>
+        </div>
+        <div class="guide-actions" role="group" aria-label="Entender">
+            <button type="button" class="btn btn-outline" @onclick='() => OnAction.InvokeAsync("explain")' disabled="@(!HasContent)">Explicación sencilla</button>
+            <button type="button" class="btn btn-outline" @onclick='() => OnAction.InvokeAsync("detail")' disabled="@(!HasContent)">Explicación detallada</button>
+            <button type="button" class="btn btn-outline" @onclick='() => OnAction.InvokeAsync("demo")' disabled="@(!HasContent)">🎧 Aprender a escuchar</button>
+        </div>
+        <div class="guide-actions" role="group" aria-label="Cambiar">
+            <button type="button" class="btn btn-outline" @onclick='() => OnAction.InvokeAsync("back")'>↩ Cambiar contenido</button>
+            <button type="button" class="btn btn-outline" @onclick='() => OnAction.InvokeAsync("menu")'>☰ Volver al menú</button>
+        </div>
+    }
+</section>
+
+@code {
+    [Parameter, EditorRequired] public GuideFlow Flow { get; set; } = default!;
+    /// <summary>Cambia cuando la guía avanza (Flow.Version): fuerza el repintado.</summary>
+    [Parameter] public int Version { get; set; }
+    /// <summary>Se incrementa cuando hay que mover el foco a la primera opción (tras una acción con teclado o tacto).</summary>
+    [Parameter] public int FocusRequest { get; set; }
+    [Parameter] public bool Busy { get; set; }
+    [Parameter] public bool Playing { get; set; }
+    [Parameter] public bool HasContent { get; set; }
+    [Parameter] public EventCallback<string> OnOption { get; set; }
+    [Parameter] public EventCallback<string> OnChange { get; set; }
+    [Parameter] public EventCallback<string> OnAction { get; set; }
+    [Parameter] public EventCallback<int> OnYear { get; set; }
+    [Parameter] public EventCallback OnMore { get; set; }
+    [Parameter] public EventCallback OnLess { get; set; }
+    [Parameter] public EventCallback OnBack { get; set; }
+    [Parameter] public EventCallback OnMenu { get; set; }
+    [Parameter] public IJSObjectReference? Js { get; set; }
+
+    readonly ElementReference[] optRefs = new ElementReference[GuideFlow.PageSize];
+    int lastFocus;
+    int? year;
+
+    int YearMin => Flow.Section == "mundo" ? Flow.Data.WorldMin : Flow.Data.Biomas?.AnioMin ?? 2001;
+    int YearMax => Flow.Section == "mundo" ? Flow.Data.WorldMax : Flow.Data.Biomas?.AnioMax ?? 2024;
+
+    static string Cap(string s) => s.Length == 0 ? s : char.ToUpperInvariant(s[0]) + s[1..];
+
+    static string SlotLabel(string slot) => slot switch
+    {
+        "item" => "visualización", "tipo" => "mapa", "region" => "región", "anio" => "año", "fuente" => "datos",
+        "vars" or "pick" => "variables", _ => slot
+    };
+
+    /// <summary>Solo la pregunta (la lista de opciones ya está en los botones).</summary>
+    string Question => Flow.Stage switch
+    {
+        GuideStage.Menu => "¿Qué quieres escuchar?",
+        GuideStage.Choose when Flow.Section == "archivo" => "Elige una imagen o un video. Se procesa en tu navegador y no se sube a ningún servidor.",
+        _ when Flow.Clarifying => "Hay varias opciones parecidas. ¿Cuál quieres?",
+        GuideStage.Choose => Flow.Question(Flow.CurrentSlot ?? ""),
+        GuideStage.Demo => "Elige una capa para escucharla sola y entender qué representa.",
+        GuideStage.Loading => "Cargando tu selección…",
+        GuideStage.Ready => $"Listo: {Flow.LoadedTitle}",
+        GuideStage.Error => $"No se pudo cargar: {Flow.ErrorMessage}",
+        _ => ""
+    };
+
+    async Task SubmitYear()
+    {
+        if (year is int y) await OnYear.InvokeAsync(y);
+    }
+
+    async Task OpenFileKey(KeyboardEventArgs e)
+    {
+        // Enter o Espacio sobre la etiqueta abren el selector, como un botón.
+        if (e.Key is "Enter" or " " && Js is not null) await Js.InvokeVoidAsync("clickById", "mediaFile");
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (FocusRequest == lastFocus || Js is null) return;
+        lastFocus = FocusRequest;
+        try { await Js.InvokeVoidAsync("focusElement", optRefs[0]); }
+        catch (Exception ex) when (ex is JSException or InvalidOperationException) { /* sin opciones visibles */ }
+    }
+}

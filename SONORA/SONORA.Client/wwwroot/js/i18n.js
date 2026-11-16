@@ -201,6 +201,24 @@ const D = {
   "Asistente": "Assistant", "Abrir el asistente de voz": "Open the voice assistant", "Cerrar el asistente": "Close the assistant",
   "🎬 Descargar video con sonido": "🎬 Download video with sound",
   "⏹ Grabando video… (pulsa para terminar)": "⏹ Recording video… (press to stop)",
+  // ---------- Bienvenida accesible y guía hablada ----------
+  "Bienvenido a Sonora": "Welcome to Sonora",
+  "Escucha nuestro planeta. ¿Necesitas ayuda para navegar? Puedes activar la guía hablada o continuar sin ella.":
+    "Listen to our planet. Do you need help to navigate? You can turn on the spoken guide or continue without it.",
+  "Activar guía hablada": "Turn on spoken guide", "Ahora no": "Not now", "🧭 Activar guía hablada": "🧭 Turn on spoken guide",
+  "Enter activa la guía y Escape continúa sin ella. La guía no enciende el micrófono: podrás usar el teclado, tocar los botones o, si quieres, elegir «Usar micrófono».":
+    "Enter turns on the guide and Escape continues without it. The guide does not turn on the microphone: you can use the keyboard, tap the buttons or, if you want, choose «Use microphone».",
+  "Cerrar asistente": "Close assistant", "✕ Cerrar": "✕ Close", "Guía hablada": "Spoken guide", "Estás en:": "You are in:",
+  "⏹ Detener voz": "⏹ Stop voice", "🔈 Voz de SONORA: activada": "🔈 SONORA voice: on", "🔇 Voz de SONORA: desactivada": "🔇 SONORA voice: off",
+  "🎙 Usar micrófono": "🎙 Use microphone", "⏳ Procesando…": "⏳ Processing…", "Enviar": "Send", "✎ Corregir": "✎ Correct", "Entendí: «": "I understood: «",
+  "Escuchando": "Listening", "Procesando": "Processing", "Cargando": "Loading", "Reproduciendo": "Playing", "En pausa": "Paused",
+  "◀ Opciones anteriores": "◀ Previous options", "Más opciones ▶": "More options ▶", "↩ Volver": "↩ Back", "☰ Menú": "☰ Menu",
+  "⟳ Reintentar": "⟳ Retry", "✎ Corregir la última elección": "✎ Correct the last choice", "☰ Volver al menú": "☰ Back to menu",
+  "🗣 Describir el momento": "🗣 Describe this moment", "🔉 Bajar volumen": "🔉 Volume down", "🔊 Subir volumen": "🔊 Volume up",
+  "Explicación sencilla": "Simple explanation", "Explicación detallada": "Detailed explanation", "🎧 Aprender a escuchar": "🎧 Learn to listen",
+  "↩ Cambiar contenido": "↩ Change content", "O escribe el año": "Or type the year", "Elegir año": "Choose year",
+  "¿Qué quieres escuchar?": "What do you want to listen to?", "Tu selección": "Your selection",
+  "Voz de SONORA (asistente, guía y lectura)": "SONORA voice (assistant, guide and reading)",
 };
 const DICT = new Map(Object.entries(D).map(([k, v]) => [k.replace(/\s+/g, " "), v]));
 
