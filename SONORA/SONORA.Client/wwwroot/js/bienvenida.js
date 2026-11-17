@@ -1,11 +1,19 @@
-// Bienvenida por voz inmediata. Se carga antes que .NET (Blazor WebAssembly tarda unos segundos en arrancar):
-// con el primer clic, toque o tecla dice el saludo al instante. Cuando la app está lista, sonora.js continúa
-// (qué está sonando, teclas y la pregunta del modo manos libres) a través de window.__sonoraWelcome.
+// Bienvenida por voz mientras arranca .NET (Blazor WebAssembly tarda unos segundos). Los navegadores solo dejan hablar
+// después de una interacción: con el primer clic, toque o tecla se dice la bienvenida al instante. Cuando la app está
+// lista abre su diálogo de bienvenida (botones «Activar guía hablada» y «Ahora no») y, si la voz ya sonó aquí, no la repite
+// (window.__sonoraWelcome.spoken). Aquí nunca se decide nada: el silencio no cuenta como respuesta.
 (function () {
   "use strict";
   var es = (navigator.language || "es").toLowerCase().indexOf("es") === 0;
-  var w = window.__sonoraWelcome = { fired: false, acts: false, done: null, notify: null };
+  var w = window.__sonoraWelcome = { fired: false, acts: false, spoken: false, done: null, notify: null };
   if ("speechSynthesis" in window) { try { speechSynthesis.getVoices(); } catch (e) { /* las voces cargan solas */ } }
+  // Quien desactivó la voz de SONORA (usa su lector de pantalla) no la oye tampoco aquí.
+  var ownVoice = true;
+  try { var p = JSON.parse(localStorage.getItem("sonora-prefs") || "null"); if (p && p.ownVoice === false) ownVoice = false; } catch (e) { /* sin almacenamiento */ }
+
+  var TEXT = es
+    ? ["Bienvenido a Sonora.", "Escucha nuestro planeta.", "¿Necesitas ayuda para navegar?", "Puedes activar la guía hablada o continuar sin ella."]
+    : ["Welcome to Sonora.", "Listen to our planet.", "Do you need help to navigate?", "You can turn on the spoken guide or continue without it."];
 
   function voice(u) {
     u.lang = es ? "es-ES" : "en-US";
@@ -15,7 +23,6 @@
     } catch (e) { /* voz por defecto */ }
     return u;
   }
-  // Dice las frases en orden; true si terminó, false si otra locución (u otra acción) lo cortó.
   function say(parts) {
     return new Promise(function (resolve) {
       var k = 0;
@@ -35,18 +42,12 @@
     document.removeEventListener("keydown", first, true);
     w.fired = true;
     var t = e.target;
-    w.acts = !!(t && t.closest && t.closest("button,a,input,select,textarea,label,summary,[role=tab],canvas"))
-      || (e.type === "keydown" && /^( |Enter|Arrow\w+|[aAdDeEhHlLmMvV1-5])$/.test(e.key));
+    w.acts = !!(t && t.closest && t.closest("button,a,input,select,textarea,label,summary,[role=tab],canvas"));
+    // Si la app ya cargó, su diálogo de bienvenida se encarga de la voz.
+    var appReady = !document.getElementById("sonora-cargando");
     var quiet = e.type === "keydown" && /^[aAlLmM]$/.test(e.key); // va a escuchar o a leer la página: no hablar encima
-    if (!("speechSynthesis" in window) || quiet) { w.done = Promise.resolve(false); }
-    else if (w.acts) { w.done = say([es ? "Bienvenido a SONORA." : "Welcome to SONORA."]).then(function () { return false; }); }
-    else {
-      w.done = say(es
-        ? ["Bienvenido a SONORA.", "Escucha nuestro planeta.",
-           "Convierte las visualizaciones de la Tierra de la NASA, o tu propia imagen o video, en música que se puede escuchar, explorar y entender sin necesidad de verla."]
-        : ["Welcome to SONORA.", "Listen to our planet.",
-           "It turns NASA's visualizations of Earth, or your own image or video, into music you can hear, explore and understand without needing to see it."]);
-    }
+    if (!("speechSynthesis" in window) || !ownVoice || quiet || appReady) { w.done = Promise.resolve(false); }
+    else { w.spoken = true; w.done = say(TEXT); }
     if (w.notify) w.notify();
   }
   document.addEventListener("pointerdown", first, true);

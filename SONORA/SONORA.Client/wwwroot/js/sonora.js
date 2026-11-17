@@ -111,15 +111,18 @@ export function init(dotnetRef, stage, canvas, img, video) {
     const r = canvas.getBoundingClientRect();
     dn.invokeMethodAsync("OnCenterRequested", (e.clientX - r.left) / r.width, (e.clientY - r.top) / r.height);
   });
-  document.addEventListener("keydown", onKey);
+  // Captura: así Esc puede callar la voz antes de que el panel del asistente lo use para cerrarse.
+  document.addEventListener("keydown", onKey, true);
 }
 
 function onKey(e) {
-  // Como en los lectores de pantalla: Ctrl o Esc callan la lectura de la página.
-  if ((e.key === "Control" || e.key === "Escape") && lector.isReading()) { lector.stopReading(); if (e.key === "Escape") e.preventDefault(); return; }
-  if (e.ctrlKey || e.metaKey || e.altKey) return;
   const t = e.target, tag = t.tagName;
-  if (t.closest && t.closest("dialog")) return;
+  if (t.closest && t.closest("dialog")) return; // la bienvenida y la ayuda gestionan sus propias teclas
+  // Como en los lectores de pantalla: Ctrl o Esc callan la voz de SONORA (lectura, explicación o respuesta).
+  if ((e.key === "Control" || e.key === "Escape") && (lector.isReading() || isSpeaking())) { stopVoice(); if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); } return; }
+  if (e.ctrlKey || e.metaKey || e.altKey) return;
+  // Dentro del panel del asistente y de la guía, las letras y los números no son atajos (se usan sus botones).
+  if (t.closest && t.closest("[data-no-shortcuts]")) return;
   if (tag === "TEXTAREA" || tag === "SELECT" || (tag === "INPUT" && !["checkbox", "radio", "button"].includes(t.type))) return;
   const k = e.key;
   // L (leer la página) y M (manos libres) funcionan aunque todavía no haya nada cargado.
@@ -136,7 +139,7 @@ function onKey(e) {
   else if (/^[aAdDeEhHvV1-5]$/.test(k)) { e.preventDefault(); dn.invokeMethodAsync("OnShortcut", k.toLowerCase()); }
 }
 
-export function dispose() { document.removeEventListener("keydown", onKey); pause(); }
+export function dispose() { document.removeEventListener("keydown", onKey, true); pause(); }
 
 // ======================================================================================
 // Carga de medios
@@ -432,6 +435,7 @@ export async function recordPiece(fileName, withVideo = false) {
 export function isRecording() { return !!recording; }
 
 export function focusById(id) { document.getElementById(id)?.focus(); }
+export function clickById(id) { document.getElementById(id)?.click(); }
 
 // Un mapa de Leaflet que estaba oculto (en otra pestaña) necesita recalcular su tamaño al mostrarse.
 export function refreshMaps() {
@@ -1340,7 +1344,7 @@ function utterance(text, rate) {
   return u;
 }
 export async function speak(text, rate) {
-  if (!("speechSynthesis" in window)) return false;
+  if (!("speechSynthesis" in window) || !lector.voiceEnabled()) return false;
   const gen = ++welcomeGen; // otra locución interrumpe la bienvenida
   const t = await tr(text);
   if (gen !== welcomeGen) return false;
@@ -1353,7 +1357,7 @@ export function stopSpeech() { welcomeGen++; if ("speechSynthesis" in window) sp
 // Se trocea por frases porque Chrome corta las locuciones largas (~15 s).
 let welcomeGen = 0;
 export async function speakAndWait(parts, rate, alreadyInLang = false) {
-  if (!("speechSynthesis" in window)) return false;
+  if (!("speechSynthesis" in window) || !lector.voiceEnabled()) return false;
   speechSynthesis.cancel();
   const gen = ++welcomeGen;
   if (!alreadyInLang) parts = await Promise.all(parts.map(p => tr(p)));
@@ -1421,19 +1425,92 @@ export function stopListening() { if (rec) rec.stop(); }
 // Resuelve cuando termina de hablar (o la interrumpen): el modo manos libres espera eso para volver a escuchar.
 export async function assistantSay(text, rate) {
   const gen = ++sayGen; // una locución cancelada no debe devolver el volumen durante la siguiente
-  if (!("speechSynthesis" in window) || !text) { if (!lector.isReading()) duck(false); return; }
+  // Sin voz propia (lector de pantalla): el texto ya está en la región aria-live; no se habla encima.
+  if (!("speechSynthesis" in window) || !text || !lector.voiceEnabled()) { if (!lector.isReading()) duck(false); return; }
   text = await tr(text);
   if (gen !== sayGen) return;
   lector.stopReading(); speechSynthesis.cancel(); duck(true);
   const parts = (text.match(/[^.!?]+[.!?]*/g) || [text]).map(p => p.trim()).filter(Boolean);
   await new Promise(resolve => {
-    const safety = setTimeout(resolve, 60000);
+    // Respaldo si el navegador no avisa del final (pasa en algunos sistemas): según la longitud, no un minuto fijo.
+    const safety = setTimeout(() => { if (gen === sayGen) duck(false); resolve(); }, Math.min(60000, 3000 + text.length * 90 / (rate || 1)));
     parts.forEach((p, i) => {
       const u = utterance(p, rate);
       if (i === parts.length - 1) u.onend = u.onerror = () => { clearTimeout(safety); if (gen === sayGen) duck(false); resolve(); };
       speechSynthesis.speak(u);
     });
   });
+}
+
+// ---------- Voz propia, interrupción y preferencias ----------
+/** Corta al instante cualquier voz de SONORA (asistente, explicación, lectura de la página o bienvenida). */
+export function stopVoice() {
+  sayGen++; welcomeGen++;
+  lector.stopReading();
+  if ("speechSynthesis" in window) speechSynthesis.cancel();
+  duck(false);
+}
+export function isSpeaking() { return "speechSynthesis" in window && (speechSynthesis.speaking || speechSynthesis.pending); }
+export function setOwnVoice(on) { lector.setVoiceEnabled(on); if (!on) stopVoice(); }
+
+// Preferencias locales (velocidad de narración, volumen, guía, voz propia). El micrófono nunca se guarda: al recargar
+// siempre empieza apagado.
+const PREFS = "sonora-prefs";
+export function loadPrefs() {
+  try { const p = JSON.parse(localStorage.getItem(PREFS) || "null"); return p && typeof p === "object" ? p : null; } catch { return null; }
+}
+export function savePrefs(p) { try { localStorage.setItem(PREFS, JSON.stringify(p)); } catch { /* modo privado o sin almacenamiento */ } }
+
+// ---------- Bienvenida accesible (<dialog> modal) ----------
+// Enter acepta y Escape descarta solo mientras la bienvenida está abierta; si el foco está en un botón, Enter pulsa ese botón.
+let welcomeDlg = null, welcomeKeys = null, welcomeCancel = null, welcomeFirst = null;
+export function openWelcome(dlg) {
+  if (!dlg) return;
+  welcomeDlg = dlg;
+  welcomeKeys = e => {
+    if (e.key !== "Enter" || e.isComposing) return;
+    if (e.target.closest("button,a,input,select,textarea,summary")) return; // el control enfocado decide
+    e.preventDefault();
+    dlg.querySelector("[data-welcome-accept]")?.click();
+  };
+  welcomeCancel = e => { e.preventDefault(); dlg.querySelector("[data-welcome-dismiss]")?.click(); };
+  dlg.addEventListener("keydown", welcomeKeys);
+  dlg.addEventListener("cancel", welcomeCancel); // Escape
+  if (!dlg.open) dlg.showModal();
+  dlg.querySelector("[data-welcome-accept]")?.focus();
+}
+export function closeWelcome() {
+  const dlg = welcomeDlg;
+  if (!dlg) return;
+  dlg.removeEventListener("keydown", welcomeKeys);
+  dlg.removeEventListener("cancel", welcomeCancel);
+  if (welcomeFirst) { ["pointerdown", "keydown"].forEach(t => document.removeEventListener(t, welcomeFirst, true)); welcomeFirst = null; }
+  if (dlg.open) dlg.close();
+  welcomeDlg = null;
+}
+/**
+ * Dice la bienvenida si el navegador ya permite hablar (hubo interacción). Si no, espera a la primera tecla o toque
+ * dentro de la bienvenida que no sea uno de sus botones (esos botones hablan por su cuenta). Nunca se interpreta el
+ * silencio como respuesta: aquí solo se habla, no se decide nada.
+ * Devuelve "spoken", "already" (bienvenida.js ya la dijo mientras cargaba), "waiting" o "off" (sin voz propia).
+ */
+export function speakWelcome(text, rate) {
+  if (!("speechSynthesis" in window) || !lector.voiceEnabled()) return "off";
+  if (window.__sonoraWelcome?.spoken) return "already";
+  const go = () => { speechSynthesis.cancel(); speechSynthesis.speak(utterance(text, rate)); };
+  if (navigator.userActivation?.hasBeenActive) { go(); return "spoken"; }
+  welcomeFirst = e => {
+    if (!welcomeDlg?.open) return;
+    // Pulsar uno de sus botones (clic, Enter, Espacio) o Escape decide: no hace falta decir la bienvenida.
+    // Tab u otras teclas solo exploran: entonces sí se dice.
+    const decides = e.type === "pointerdown" ? !!e.target.closest?.("[data-welcome-actions] button") : /^(Enter| |Escape)$/.test(e.key);
+    if (decides) return;
+    ["pointerdown", "keydown"].forEach(t => document.removeEventListener(t, welcomeFirst, true));
+    welcomeFirst = null;
+    go();
+  };
+  ["pointerdown", "keydown"].forEach(t => document.addEventListener(t, welcomeFirst, true));
+  return "waiting";
 }
 
 export function showDialog(el) { if (el && !el.open) el.showModal(); }

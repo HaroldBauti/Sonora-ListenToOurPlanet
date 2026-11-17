@@ -34,6 +34,7 @@ Then open http://localhost:5241. Requires the .NET 10 SDK and a modern browser (
   - Controls: play, tempo, volume, scale, describe, download audio.
   - Tabs: 🎚 **Layers** · 🗺 **Map** (OpenStreetMap context, everything outside the sounding area is greyed out) · 📖 **What you are hearing** · 🤖 **Voice assistant**.
 - **3. Accessibility**: always visible.
+- **Accessible welcome and spoken guide**: on entry SONORA asks whether you need help to navigate (**Turn on spoken guide** / **Not now**, Enter / Escape). The **Assistant** button is always visible and contains the spoken guide (real sections and only the data each one needs, in short groups, by keyboard, touch or optional voice), simple and detailed explanations, «Learn to listen», «where am I?» and «what can I do here?». The microphone is only used after pressing «Use microphone». SONORA's own voice can be turned off to use a screen reader. Details (in Spanish): [docs/asistente-de-voz.md](docs/asistente-de-voz.md).
 
 ## Architecture
 | Path | What it is |

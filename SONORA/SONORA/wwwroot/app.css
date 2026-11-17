@@ -360,3 +360,69 @@ footer { margin-top: 28px; color: var(--muted); font-size: .88rem; text-align: c
 /* Botón de idioma (ES / EN) en la cabecera */
 .hero .brand { position: relative; }
 .lang-toggle { margin-left: auto; align-self: center; white-space: nowrap; }
+
+/* ---------- Bienvenida accesible ---------- */
+dialog.welcome {
+    max-width: min(560px, calc(100vw - 32px)); width: 100%; box-sizing: border-box; padding: 24px;
+    background: var(--panel); color: var(--text); border: 2px solid var(--accent-2); border-radius: var(--radius);
+}
+dialog.welcome::backdrop { background: rgba(0, 0, 0, .75); }
+dialog.welcome h2 { margin: 0 0 8px; font-size: 1.6em; }
+dialog.welcome p { font-size: 1.1em; line-height: 1.5; }
+.welcome-actions { display: flex; flex-wrap: wrap; gap: 12px; margin: 16px 0 8px; }
+.btn-big { min-height: 56px; padding: 14px 22px; font-size: 1.1em; flex: 1 1 200px; }
+@media (max-width: 480px) { .welcome-actions { flex-direction: column; } .btn-big { flex-basis: auto; width: 100%; } }
+
+/* ---------- Botón Asistente con texto visible ---------- */
+.assistant-fab { width: auto; min-width: 60px; height: 60px; border-radius: 30px; padding: 0 18px 0 14px;
+                 display: inline-flex; align-items: center; gap: 8px; }
+.assistant-fab .fab-icon { font-size: 26px; line-height: 1; }
+.assistant-fab .fab-label { font: 600 1rem Inter, sans-serif; white-space: nowrap; }
+.sonora.large-text .assistant-fab .fab-label { font-size: 1.15rem; }
+
+/* ---------- Panel del asistente y guía ---------- */
+.assistant-float { width: min(480px, calc(100vw - 32px)); max-height: min(78vh, 760px); }
+.assistant-head .state-chip { margin-left: auto; margin-right: 6px; padding: 4px 10px; border-radius: 999px; font-size: .85em; font-weight: 600;
+                              border: 1px solid var(--line); background: var(--panel-2); white-space: nowrap; }
+.state-chip.state-listening { border-color: var(--danger); color: var(--danger); }
+.state-chip.state-processing, .state-chip.state-loading { border-color: var(--warn); color: var(--warn); }
+.state-chip.state-playing { border-color: var(--accent); color: var(--accent); }
+.voice-bar { margin-bottom: 10px; }
+.voice-bar .btn { flex: 1 1 180px; }
+.guide-start { width: 100%; margin: 6px 0 12px; min-height: 52px; }
+.guide { border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 4px 0 12px; background: var(--panel); }
+.guide h3 { margin: 0 0 6px; font-size: 1.1em; }
+.guide-where { margin: 0 0 8px; color: var(--muted); }
+.guide-prompt { font-size: 1.05em; font-weight: 600; margin: 8px 0; }
+.guide-picks { list-style: none; padding: 0; margin: 0 0 8px; display: grid; gap: 6px; }
+.guide-picks li { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px;
+                  padding: 6px 8px; border-radius: 8px; background: var(--bg-2); }
+.guide-options, .guide-actions { display: grid; gap: 8px; margin: 8px 0; }
+.guide-actions { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); }
+.guide-opt { width: 100%; min-height: 52px; justify-content: flex-start; text-align: left; flex-wrap: wrap; row-gap: 2px; }
+.guide-opt .guide-num { display: inline-grid; place-items: center; min-width: 1.8em; height: 1.8em; border-radius: 50%;
+                        background: rgba(0,0,0,.2); font-weight: 700; }
+.guide-opt .guide-label { flex: 1 1 auto; }
+.guide-opt .guide-detail { flex-basis: 100%; font-weight: 400; font-size: .88em; opacity: .9; padding-left: 2.4em; }
+.guide-opt.is-rec { outline: 2px dashed var(--warn); outline-offset: 2px; }
+.guide-nav { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+.guide-nav .btn { flex: 1 1 140px; }
+.guide-year { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; }
+.guide-year input { width: 7em; min-height: 44px; font: inherit; padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line);
+                    background: var(--bg-2); color: var(--text); }
+.guide-loading { color: var(--warn); }
+.heard { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 8px 0; padding: 8px 10px; border-radius: 8px;
+         border: 1px solid var(--accent-2); }
+.heard p { margin: 0; flex: 1 1 auto; }
+label.guide-opt { cursor: pointer; }
+label.guide-opt:focus-visible { outline: 3px solid var(--focus); outline-offset: 3px; }
+
+/* Móvil: el panel ocupa el ancho y los botones son grandes para tocar (≥ 48 px) */
+@media (max-width: 600px) {
+    .assistant-float { left: 8px; right: 8px; width: auto; bottom: 84px; max-height: calc(100vh - 110px); max-height: calc(100dvh - 110px); }
+    .assistant-float .btn { min-height: 48px; }
+    .assistant-fab { right: 12px; bottom: 12px; }
+}
+@media (prefers-reduced-motion: reduce) { .guide-opt, .btn { transition: none; } }
+.high-contrast .guide, .high-contrast .guide-picks li { background: #000; border-color: #fff; }
+.high-contrast .state-chip { background: #000; color: #fff; border-color: #fff; }

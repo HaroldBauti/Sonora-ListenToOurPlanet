@@ -5,4 +5,5 @@
   </Folder>
   <Project Path="SONORA/SONORA.Client/SONORA.Client.csproj" />
   <Project Path="SONORA/SONORA/SONORA.csproj" />
+  <Project Path="SONORA/SONORA.Tests/SONORA.Tests.csproj" />
 </Solution>

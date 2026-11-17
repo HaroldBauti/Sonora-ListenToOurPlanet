@@ -32,8 +32,9 @@ La pestaña **Jukebox NASA (EIC)** reúne 24 visualizaciones de la Tierra de la 
   - Mapa: contexto de OpenStreetMap; lo que no suena queda en gris.
   - Qué estás escuchando.
 - **3. Accesibilidad:** siempre visible.
-- **Asistente de voz:** botón flotante 🤖 abajo a la derecha (tecla `A`), con modo manos libres (`M`) y lectura de la página (`L`).
-- **Idioma automático:** español o inglés según el navegador; la voz y el asistente lo siguen. Bienvenida por voz con el primer clic o tecla.
+- **Bienvenida accesible:** al entrar, «¿Necesitas ayuda para navegar?» con los botones **Activar guía hablada** y **Ahora no** (Enter y Escape).
+- **Asistente:** botón **Asistente** con texto, abajo a la derecha, en todas las secciones. Incluye la **guía hablada** (secciones y datos en grupos cortos, por teclado, tacto o voz), explicaciones sencilla y detallada, «Aprender a escuchar», «¿dónde estoy?» y «¿qué puedo hacer aquí?». El micrófono solo se usa si se pulsa «Usar micrófono» (tecla `A`); también hay manos libres (`M`) y lectura de la página (`L`). Detalles: [docs/asistente-de-voz.md](docs/asistente-de-voz.md).
+- **Idioma automático:** español o inglés según el navegador; la voz y el asistente lo siguen.
 - **Descargas:** audio de la pieza (.m4a o .webm) y video con sonido (.mp4 o .webm).
 
 ## Ejecutar
@@ -49,6 +50,10 @@ Abre http://localhost:5241. También puedes abrir `SONORA.slnx` en Visual Studio
 | `SONORA/SONORA/Sonification/MappingOptimizer.cs` | Motor musical en C#, cromosoma y optimizador |
 | `SONORA/SONORA.Client/Pages/Home.razor` | Interfaz (Blazor WebAssembly) |
 | `SONORA/SONORA.Client/Services/Describer.cs` | Textos descriptivos en español (lector de pantalla, voz, transcripción) |
+| `SONORA/SONORA.Client/Services/GuideFlow.cs`, `Explainer.cs`, `SoundRules.cs`, `StatusAnnouncer.cs` | Guía hablada (estados y órdenes contextuales), explicaciones con las reglas reales del sonido y estados anunciados |
+| `SONORA/SONORA.Client/Components/GuidePanel.razor` | Panel de la guía hablada dentro del asistente |
+| `SONORA/SONORA.Tests/` | Pruebas unitarias (xUnit) de la guía, los estados y las explicaciones |
+| `tests/e2e/` | Prueba de extremo a extremo del asistente accesible (Playwright) |
 | `SONORA/SONORA.Client/wwwroot/js/sonora.js` | Análisis de imagen y video (canvas), k-means, audio (Tone.js), teclado, vibración y voz |
 | `SONORA/SONORA.Client/wwwroot/data/` | Imagen y barra de colores de NASA SVS 5669 y frente de Pareto precalculado |
 | `SONORA/SONORA/Peru/` | Atlas de biomas de Perú en el servidor y API `/api/biomas/*` |
@@ -164,12 +169,13 @@ Esta sección escucha cómo cambió el clima de 11 regiones de Perú **año por 
   - Transcripción completa descargable en .txt.
   - Campo para que quien sube un archivo lo describa.
 - **Visual:** alto contraste, texto grande, foco visible, `prefers-reduced-motion` y enlace para saltar al reproductor.
-- **Teclado completo:** Espacio, flechas, Inicio/Fin, Esc, A (asistente), M (manos libres), L (leer la página), D (describir), V (voz), E (escala), 1–5 (capas y destellos), H (ayuda).
+- **Teclado completo:** Espacio, flechas, Inicio/Fin, Esc o Ctrl (detener la voz), A (micrófono del asistente), M (manos libres), L (leer la página), D (describir), V (narración), E (escala), 1–5 (capas y destellos), H (ayuda).
+- **Guía hablada y voz propia:** ver [docs/asistente-de-voz.md](docs/asistente-de-voz.md). La **voz de SONORA** se puede desactivar para usar el lector de pantalla; la velocidad, el volumen, la guía y la voz se recuerdan en el navegador (el micrófono no).
 - **Uso solo con la voz (personas ciegas)** — `SONORA.Client/wwwroot/js/lector.js`:
   - **Lector de página:** lee la página en orden diciendo qué es cada cosa («Sección…», «Pestaña…, seleccionada», «Botón…», «Casilla…, marcada», «Deslizador…, 88 BPM») y resalta lo que lee. `L` empieza, detiene o sigue; `Ctrl` o `Esc` lo callan.
   - **Navegación por voz:** «lee la página», «para de leer», «sigue leyendo», «siguiente sección», «lee esta sección», «qué secciones hay», «qué hay aquí», «dónde estoy en la página», «ve a accesibilidad», «abre la pestaña clima», «pulsa descargar video», «activa alto contraste», «qué visualizaciones hay», «escucha la número 3» o «escucha lluvia total». Busca en los textos de la página, así que funciona con cualquier botón o sección nueva.
   - **Manos libres:** `M` o «activa manos libres». Escucha, responde y vuelve a escuchar sin pulsar nada; mientras lee la página no escucha (oiría su propia voz). Se apaga con «desactiva manos libres», «deja de escuchar» o `M`, y se pausa solo tras cuatro silencios.
-  - Orden de las órdenes: primero la navegación de la página, después las reglas de la música y el mapa (`VoiceAssistant.Parse`) y por último el modelo de OpenAI.
+  - Orden de las órdenes: orientación y explicaciones, la guía hablada (si está activa), la navegación de la página, las reglas de la música y el mapa (`VoiceAssistant.Parse`) y por último el modelo de OpenAI.
   - Funciona en Chrome y Edge (reconocimiento de voz del navegador); en inglés acepta también órdenes como «read the page», «go to accessibility» o «press download video».
 
 ## Créditos
